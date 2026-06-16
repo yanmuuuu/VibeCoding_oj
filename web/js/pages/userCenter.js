@@ -1,6 +1,7 @@
 async function renderUserCenter(main) {
     await App.ensureAuth();
     main.innerHTML = `<div class="page-container">
+        <a href="#/problems" class="back-link">← 返回题目列表</a>
         <h2>用户中心</h2>
         <div class="user-info">
             <p>用户名: <strong>${escapeHtml(App.user.username)}</strong></p>

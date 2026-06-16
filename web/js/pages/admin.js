@@ -1,7 +1,7 @@
 async function renderAdmin(main) {
     await App.ensureAuth();
     if (!App.user.is_admin) {
-        main.innerHTML = '<div class="error-page"><h2>403</h2><p>无权限访问</p></div>';
+        main.innerHTML = '<div class="error-page"><h2>403</h2><p>无权限访问</p><a href="#/problems">返回题目列表</a></div>';
         return;
     }
     const questions = await API.getAdminQuestions();
@@ -18,6 +18,7 @@ async function renderAdmin(main) {
         </tr>`;
     });
     main.innerHTML = `<div class="page-container">
+        <a href="#/problems" class="back-link">← 返回题目列表</a>
         <h2>管理后台</h2>
         <div class="admin-actions">
             <a href="#/admin/questions" class="btn-primary" style="display:inline-block;">新建题目</a>
