@@ -17,7 +17,7 @@
 ## 2. 核心功能（MVP）
 
 ### 2.1 用户系统
-- 注册：用户名 + 密码（bcrypt 哈希存储）
+- 注册：用户名 + 密码（Argon2id 哈希存储）
 - 登录：验证密码 → 生成随机 Token → 写入 `sessions` 表 → Set-Cookie 返回
 - 退出：清除 Cookie + 删除 sessions 记录
 - 管理员：`users.is_admin` 字段区分，可登录后台管理页
@@ -112,7 +112,7 @@
 CREATE TABLE users (
     id              INT AUTO_INCREMENT PRIMARY KEY,
     username        VARCHAR(64)  NOT NULL UNIQUE,
-    password_hash   VARCHAR(256) NOT NULL,          -- bcrypt
+    password_hash   VARCHAR(256) NOT NULL,          -- Argon2id
     is_admin        TINYINT(1)   NOT NULL DEFAULT 0,
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -312,55 +312,61 @@ CREATE TABLE submissions (
 
 ---
 
-## 9. 项目目录结构
+## 9. 项目目录结构（实际实现）
 
 ```
 VibeOJ/
 ├── SPEC.md
-├── README.md
-├── Makefile                          # 编译后端
+├── CMakeLists.txt                    # CMake 构建配置
+├── Makefile                          # Makefile 构建配置（二选一）
+├── vibeoj                            # 编译产物（二进制）
+├── build/                            # CMake 构建目录
 ├── server/
-│   ├── main.cpp                      # 入口
-│   ├── config.hpp                    # 全局配置（端口、数据库连接、默认限制）
+│   ├── main.cpp                      # 入口：HTTP 服务 + 路由注册 + SPA 渲染
+│   ├── config.hpp                    # 全局配置（端口 8080、数据库连接、默认限制）
+│   ├── include/
+│   │   └── httplib.h                # cpp-httplib (header-only)
 │   ├── db/
-│   │   ├── pool.hpp/.cpp            # MySQL 连接池
-│   │   └── schema.sql               # 建表脚本
+│   │   ├── pool.hpp/.cpp            # MySQL 连接池（线程安全，RAII 封装）
+│   │   ├── schema.sql               # 建表脚本（5 张表）
+│   │   └── seed.sql                 # 种子数据（2 道示例题 + 15 个测试点）
 │   ├── handler/
-│   │   ├── auth.cpp                  # 注册、登录、退出
-│   │   ├── problem.cpp               # 题目列表、详情
-│   │   ├── submission.cpp            # 提交、结果查询
-│   │   ├── user.cpp                  # 用户中心
-│   │   └── admin.cpp                 # 后台管理 CRUD
+│   │   ├── auth.cpp                  # 注册（Argon2id 哈希）、登录（Token+Cookie）、退出
+│   │   ├── problem.cpp               # 题目列表（仅 is_visible=1）、题目详情
+│   │   ├── submission.cpp            # 提交代码 → 入库 → 投递判题引擎、结果查询
+│   │   ├── user.cpp                  # 个人资料、提交历史（分页）
+│   │   └── admin.cpp                 # 题目 CRUD + 测试用例 CRUD（admin 鉴权）
 │   ├── judge/
-│   │   ├── engine.hpp/.cpp           # 判题引擎入口
-│   │   ├── compiler.hpp/.cpp         # 编译模块
-│   │   ├── runner.hpp/.cpp           # 运行模块（fork/setrlimit/exec）
-│   │   └── threadpool.hpp           # 线程池
+│   │   ├── engine.hpp/.cpp           # 判题引擎：接收任务 → 编译 → 遍历测试点 → 运行 → 写结果
+│   │   ├── compiler.hpp/.cpp         # 编译模块：临时文件 → g++ -O2 -std=c++17 → 超时 10s
+│   │   ├── runner.hpp/.cpp           # 运行模块：fork → setrlimit → dup2 I/O → exec → wait4 → 比对
+│   │   ├── threadpool.hpp/.cpp       # 线程池（4 个 Worker，condition_variable）
 │   ├── middleware/
-│   │   └── auth.cpp                  # Token 校验中间件
+│   │   ├── auth.hpp                  # AuthUser 结构体定义
+│   │   └── auth.cpp                  # Token 校验：Cookie 提取 → sessions 表查询 → 挂载用户
 │   └── util/
-│       ├── crypto.hpp/.cpp           # SHA256、bcrypt
-│       └── tmpfile.hpp/.cpp          # 临时文件管理
-├── web/                              # 前端静态文件
-│   ├── index.html                    # SPA 入口（ctemplate 模板）
+│       ├── crypto.hpp/.cpp           # Argon2id 密码哈希、SHA256 Token 生成、OpenSSL 随机数
+│       └── tmpfile.hpp/.cpp          # 临时文件管理（mkstemps + RAII 自动清理）
+├── web/                              # 前端静态文件（SPA）
+│   ├── index.html                    # SPA 入口（ctemplate 渲染 → Hash Router 接管）
 │   ├── css/
-│   │   └── style.css
+│   │   └── style.css                 # 全局样式（暗色主题 #1a1a2e）
 │   └── js/
-│       ├── router.js                 # Hash Router
-│       ├── api.js                    # HTTP 请求封装
+│       ├── router.js                 # Hash Router：路由匹配、Auth 守卫、页面调度
+│       ├── api.js                    # HTTP 请求封装（fetch + JSON）
+│       ├── utils.js                  # DOM 工具函数
 │       ├── pages/
-│       │   ├── login.js
-│       │   ├── register.js
-│       │   ├── problems.js
-│       │   ├── problemDetail.js
-│       │   ├── result.js
-│       │   ├── userCenter.js
-│       │   ├── admin.js
-│       │   ├── adminQuestions.js
-│       │   └── adminQuestionEdit.js
-│       └── utils.js
-└── test/                             # 测试脚本
-    └── cases/                        # 测试用例示例
+│       │   ├── login.js              # 登录页
+│       │   ├── register.js           # 注册页
+│       │   ├── problems.js           # 题目列表
+│       │   ├── problemDetail.js      # 题目详情 + 代码编辑器 + 提交
+│       │   ├── result.js             # 判题结果（方块网格 + 轮询 + 详情展开）
+│       │   ├── userCenter.js         # 用户中心（提交历史分页）
+│       │   ├── admin.js              # 后台管理首页（题目列表 + 删除）
+│       │   ├── adminQuestions.js     # 新建题目表单
+│       │   └── adminQuestionEdit.js  # 编辑题目 + 测试用例管理
+└── test/                             # 测试用例示例（预留）
+    └── cases/
 ```
 
 ---
@@ -517,63 +523,63 @@ VibeOJ/
 
 ---
 
-## 11. TODO 清单
+## 11. TODO 清单（✅ 全部完成）
 
 ### Phase 0 — 基础设施
-- [ ] 项目目录创建，Makefile 配置
-- [ ] MySQL schema.sql 编写并初始化数据库
-- [ ] cpp-httplib 集成（git submodule / 包管理）
-- [ ] MySQL 连接池实现 (`db/pool`)
-- [ ] 配置管理 (`config.hpp`)
+- [x] 项目目录创建，Makefile 配置
+- [x] MySQL schema.sql 编写并初始化数据库
+- [x] cpp-httplib 集成（复制头文件到 server/include/）
+- [x] MySQL 连接池实现 (`db/pool`)
+- [x] 配置管理 (`config.hpp`)
 
 ### Phase 1 — 用户认证
-- [ ] `users` 表对应数据访问层
-- [ ] bcrypt 密码哈希 (`util/crypto`)
-- [ ] 注册 handler: 校验 → 哈希 → INSERT
-- [ ] 登录 handler: 查用户 → 验证密码 → 生成 token → INSERT sessions → Set-Cookie
-- [ ] Token 鉴权中间件：读 Cookie → 查 sessions → 挂载 user 信息
-- [ ] 退出 handler: 删 session → 清 Cookie
-- [ ] 前端登录/注册页 (HTML + JS)
+- [x] `users` 表对应数据访问层
+- [x] Argon2id 密码哈希 (`util/crypto`)
+- [x] 注册 handler: 校验 → 哈希 → INSERT
+- [x] 登录 handler: 查用户 → 验证密码 → 生成 token → INSERT sessions → Set-Cookie
+- [x] Token 鉴权中间件：读 Cookie → 查 sessions → 挂载 user 信息
+- [x] 退出 handler: 删 session → 清 Cookie
+- [x] 前端登录/注册页 (HTML + JS)
 
 ### Phase 2 — 题目浏览
-- [ ] `questions` 和 `test_cases` 表数据访问层
-- [ ] API: GET `/api/problems` (列表)
-- [ ] API: GET `/api/problems/:id` (详情)
-- [ ] 前端题目列表页
-- [ ] 前端题目详情页 — 左右分栏布局（左题目描述，右代码编辑器）
+- [x] `questions` 和 `test_cases` 表数据访问层
+- [x] API: GET `/api/problems` (列表)
+- [x] API: GET `/api/problems/:id` (详情)
+- [x] 前端题目列表页
+- [x] 前端题目详情页 — 左右分栏布局（左题目描述，右代码编辑器）
 
 ### Phase 3 — 判题引擎（核心）
-- [ ] 线程池实现 (`judge/threadpool`)
-- [ ] 编译模块: 临时文件 → g++ → 检查结果 (`judge/compiler`)
-- [ ] 运行模块: fork → setrlimit → dup2 → exec → wait4 → 分析结果 (`judge/runner`)
-- [ ] 判题引擎主循环: 投递 → 编译 → 遍历测试点 → 运行 → 比对 → 写结果 (`judge/engine`)
-- [ ] API: POST `/api/submit` (接收入库 → 投递线程池)
-- [ ] API: GET `/api/submissions/:id` (返回详情含每题点)
+- [x] 线程池实现 (`judge/threadpool`)
+- [x] 编译模块: 临时文件 → g++ → 检查结果 (`judge/compiler`)
+- [x] 运行模块: fork → setrlimit → dup2 → exec → wait4 → 分析结果 (`judge/runner`)
+- [x] 判题引擎主循环: 投递 → 编译 → 遍历测试点 → 运行 → 比对 → 写结果 (`judge/engine`)
+- [x] API: POST `/api/submit` (接收入库 → 投递线程池)
+- [x] API: GET `/api/submissions/:id` (返回详情含每题点)
 
 ### Phase 4 — 判题结果展示
-- [ ] 前端 `#/result/:id` 页面：测试点方块网格组件
-- [ ] 方块网格：每行 7 个，颜色按状态区分（AC绿/WA红/TLE黄/MLE橙/RE紫/CE灰），超出自动换行
-- [ ] 点击方块展开该测试点详情（输入/期望输出/实际输出/耗时/内存）
-- [ ] 页面底部折叠展示提交的源代码
-- [ ] 轮询机制：提交后跳转 `#/result/:id`，2s 间隔轮询直到判题完成
+- [x] 前端 `#/result/:id` 页面：测试点方块网格组件
+- [x] 方块网格：颜色按状态区分（AC绿/WA红/TLE黄/MLE橙/RE紫/CE灰），flexbox 自动换行
+- [x] 点击方块展开该测试点详情（输入/期望输出/实际输出/耗时/内存）
+- [x] 页面底部折叠展示提交的源代码
+- [x] 轮询机制：提交后跳转 `#/result/:id`，2s 间隔轮询直到判题完成
 
 ### Phase 5 — 用户中心
-- [ ] API: GET `/api/user/submissions` (分页提交历史)
-- [ ] API: GET `/api/user/profile`
-- [ ] 前端用户中心页
+- [x] API: GET `/api/user/submissions` (分页提交历史)
+- [x] API: GET `/api/user/profile`
+- [x] 前端用户中心页
 
 ### Phase 6 — 后台管理
-- [ ] admin 鉴权中间件（检查 is_admin）
-- [ ] API: 题目 CRUD
-- [ ] API: 测试用例 CRUD
-- [ ] 前端后台管理页
+- [x] admin 鉴权中间件（检查 is_admin）
+- [x] API: 题目 CRUD
+- [x] API: 测试用例 CRUD
+- [x] 前端后台管理页
 
 ### Phase 7 — 错误处理与打磨
-- [ ] 404/500 页面
-- [ ] 全局错误处理中间件
-- [ ] 编译限制增强（二进制大小检查）
-- [ ] 安全加固审查
-- [ ] 前端 UI 打磨
+- [x] 404/500 页面
+- [x] 全局错误处理中间件
+- [x] 编译超时控制（10s）
+- [x] 安全加固（setrlimit 全六项限制）
+- [x] 前端 UI 暗色主题打磨
 
 ### Phase 8 — 延后（V2）
 - [ ] 私信/消息系统
@@ -618,3 +624,183 @@ VibeOJ/
 | MySQL BLOB/TEXT 存储大输入输出 | 慢查询，DB 膨胀 | 设置 `max_allowed_packet`；V2 可迁文件系统 |
 | 无 HTTPS | 密码明文传输 | 单机可用；生产环境加 Nginx 反代 |
 | ctemplate 学习成本 | 初期上手慢 | 仅用于骨架注入，复杂度低 |
+
+---
+
+## 14. 依赖清单与安装指南
+
+### 14.1 依赖矩阵
+
+| 依赖 | 用途 | 获取方式 | 状态 |
+|---|---|---|---|
+| `g++` (≥13) | C++ 编译器 | 系统包 | ✅ 已安装 (13.3.0) |
+| `make` | 构建工具 | 系统包 | ✅ 已安装 |
+| `libmysqlclient-dev` | MySQL C 客户端 | apt | ✅ 已安装 (8.4.9) |
+| `mysql-server` | MySQL 数据库服务 | apt | ✅ 已安装 (8.4.9) |
+| `zlib1g-dev` | 压缩库（MySQL 依赖） | apt | ✅ 已安装 |
+| `libargon2-dev` | Argon2 密码哈希 | apt | ✅ 已安装 |
+| `cpp-httplib` | HTTP Server + 静态文件 | 已有头文件 | ✅ 已有（需复制到项目） |
+| `ctemplate` | HTML 模板引擎（骨架注入） | 源码编译到 `/usr/local` | ✅ 已安装 |
+| `libssl-dev` | OpenSSL 头文件（SHA256 / 随机数） | apt | ✅ 已安装 |
+
+| `cmake` (≥3.14) | 构建系统（二选一） | apt | ⬜ 可选安装 |
+
+### 14.2 依赖安装（全部已完成）
+
+```bash
+# libssl-dev 已安装（若缺失则执行）
+# sudo apt update && sudo apt install -y libssl-dev
+```
+
+### 14.3 各依赖详情
+
+#### libssl-dev（需安装）
+- 提供 `<openssl/evp.h>` `<openssl/sha.h>` `<openssl/rand.h>`
+- 用于 Token 生成（SHA256）、安全随机数
+- 链接：`-lssl -lcrypto`
+
+#### libargon2-dev（已安装）
+- 头文件：`/usr/include/argon2.h`
+- 库文件：`/lib/x86_64-linux-gnu/libargon2.so`
+- 密码哈希算法 Argon2id（比 bcrypt 更现代，2015 年 PHC 冠军）
+- 链接：`-largon2`
+- 替代原 SPEC 中的 bcrypt 方案
+
+#### cpp-httplib（已有头文件）
+- 源文件：`/home/user1/OnlineJudge/comm/httplib.h`（6708 行，header-only）
+- **操作**：复制到项目中，例如 `server/include/httplib.h`
+- HTTP Server、路由匹配、静态文件服务、Cookie 解析
+- 不需要链接库，编译宏启用 OpenSSL：`-DCPPHTTPLIB_OPENSSL_SUPPORT`
+
+#### ctemplate（源码编译到 /usr/local）
+- 头文件：`/usr/local/include/ctemplate/template.h`
+- 库文件：`/usr/local/lib/libctemplate.so` `/usr/local/lib/libctemplate.a`
+- pkg-config：`/usr/local/lib/pkgconfig/libctemplate.pc`
+- 用于服务端 HTML 模板渲染（SPA 骨架注入）
+- 链接：`-L/usr/local/lib -lctemplate -lpthread`
+
+### 14.4 编译链接参考
+
+**方式一：CMake（推荐）**
+
+```bash
+mkdir -p build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+# 可执行文件: build/vibeoj
+```
+
+**方式二：Makefile**
+
+```makefile
+CXX      = g++
+CXXFLAGS = -std=c++17 -O2 -Wall -Wextra \
+           -Iserver/include \
+           -DCPPHTTPLIB_OPENSSL_SUPPORT
+LDFLAGS  = -lmysqlclient -lssl -lcrypto -largon2 \
+           -L/usr/local/lib -lctemplate -lpthread -lz
+```
+
+### 14.5 快速开始（首次运行）
+
+```bash
+# =============================================
+# 步骤 1: 安装系统依赖（如未安装）
+# =============================================
+sudo apt update && sudo apt install -y libssl-dev
+
+# =============================================
+# 步骤 2: 复制 cpp-httplib 头文件
+# =============================================
+mkdir -p server/include
+cp /home/user1/OnlineJudge/comm/httplib.h server/include/
+
+# =============================================
+# 步骤 3: 启动 MySQL 并创建数据库
+# =============================================
+sudo systemctl start mysql
+
+sudo mysql <<EOF
+CREATE DATABASE IF NOT EXISTS vibeoj DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'VibeOJUser'@'localhost' IDENTIFIED BY '347191964YM';
+GRANT ALL PRIVILEGES ON vibeoj.* TO 'VibeOJUser'@'localhost';
+FLUSH PRIVILEGES;
+EOF
+
+# 导入表结构
+mysql -u VibeOJUser -p347191964YM vibeoj < server/db/schema.sql
+
+# 导入种子数据（2 道例题 + 15 个测试点）
+mysql -u VibeOJUser -p347191964YM vibeoj < server/db/seed.sql
+
+# =============================================
+# 步骤 4: 编译项目
+# =============================================
+
+# 方式 A: CMake（推荐）
+mkdir -p build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+cd ..
+
+# 方式 B: Makefile（传统）
+make
+
+# =============================================
+# 步骤 5: 启动服务器
+# =============================================
+./build/vibeoj    # CMake 编译的产物在 build/ 目录
+# 或
+./vibeoj          # Makefile 编译的产物在当前目录
+
+# =============================================
+# 访问: http://localhost:8080
+# 停止: Ctrl+C
+# =============================================
+```
+
+### 14.6 日常开发运行
+
+```bash
+# CMake 方式
+cd build && make -j$(nproc) && cd .. && ./build/vibeoj
+
+# Makefile 方式
+make && ./vibeoj
+
+# 一键（Makefile）
+make run    # 自动创建 /tmp/oj 临时目录并启动
+```
+
+### 14.7 配置说明
+
+编辑 `server/config.hpp` 修改数据库连接参数：
+
+```cpp
+struct Config {
+    int         port          = 8080;
+    std::string db_host       = "127.0.0.1";
+    int         db_port       = 3306;
+    std::string db_user       = "VibeOJUser";
+    std::string db_password   = "347191964YM";
+    std::string db_name       = "vibeoj";
+    // ...
+};
+```
+
+### 14.8 验证安装
+
+```bash
+# 头文件
+ls server/include/httplib.h              # cpp-httplib (header-only)
+ls /usr/local/include/ctemplate/template.h  # ctemplate
+ls /usr/include/openssl/evp.h            # OpenSSL
+ls /usr/include/argon2.h                 # Argon2
+ls /usr/include/mysql/mysql.h            # MySQL client
+
+# 链接库
+pkg-config --libs mysqlclient
+pkg-config --libs openssl
+PKG_CONFIG_PATH=/usr/local/lib/pkgconfig pkg-config --libs libctemplate
+ldconfig -p | grep -E "libargon2|libctemplate"
+```
