@@ -1,6 +1,7 @@
 #include <httplib.h>
 #include "../db/pool.hpp"
 #include "../middleware/auth.hpp"
+#include "../util/json_extract.hpp"
 #include <sstream>
 
 void register_user_routes(httplib::Server& svr) {
@@ -8,11 +9,11 @@ void register_user_routes(httplib::Server& svr) {
         AuthUser user = authenticate(req);
         if (!user.valid) {
             res.status = 401;
-            res.set_content("{\"error\":\"Not authenticated\"}", "application/json");
+            res.set_content("{\"error\":\"未登录\"}", "application/json");
             return;
         }
         res.set_content("{\"id\":" + std::to_string(user.id) +
-                        ",\"username\":\"" + user.username + "\"" +
+                        ",\"username\":\"" + json_escape(user.username) + "\"" +
                         ",\"is_admin\":" + (user.is_admin ? "true" : "false") + "}",
                         "application/json");
     });
@@ -21,7 +22,7 @@ void register_user_routes(httplib::Server& svr) {
         AuthUser user = authenticate(req);
         if (!user.valid) {
             res.status = 401;
-            res.set_content("{\"error\":\"Not authenticated\"}", "application/json");
+            res.set_content("{\"error\":\"未登录\"}", "application/json");
             return;
         }
 
@@ -53,7 +54,7 @@ void register_user_routes(httplib::Server& svr) {
             first = false;
             json << "{\"id\":" << row[0]
                  << ",\"question_id\":" << row[1]
-                 << ",\"title\":\"" << (row[2] ? row[2] : "") << "\""
+                 << ",\"title\":\"" << json_escape(row[2] ? row[2] : "") << "\""
                  << ",\"status\":\"" << (row[3] ? row[3] : "") << "\""
                  << ",\"total_time\":" << (row[4] ? row[4] : "0")
                  << ",\"total_memory\":" << (row[5] ? row[5] : "0")

@@ -8,12 +8,12 @@ static bool check_admin(const httplib::Request& req, httplib::Response& res) {
     AuthUser user = authenticate(req);
     if (!user.valid) {
         res.status = 401;
-        res.set_content("{\"error\":\"Not authenticated\"}", "application/json");
+        res.set_content("{\"error\":\"未登录\"}", "application/json");
         return false;
     }
     if (!user.is_admin) {
         res.status = 403;
-        res.set_content("{\"error\":\"Admin only\"}", "application/json");
+        res.set_content("{\"error\":\"需要管理员权限\"}", "application/json");
         return false;
     }
     return true;

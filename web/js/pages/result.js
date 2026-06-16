@@ -77,15 +77,18 @@ async function renderResult(main) {
             if (idx < 0 || idx >= detail.length) return;
             const tc = detail[idx];
             const detailEl = $('#test-detail');
+
+            const statusText = {
+                'AC': '通过', 'WA': '答案错误', 'TLE': '超时', 'MLE': '内存超限',
+                'RE': '运行错误', 'CE': '编译错误', 'SE': '系统错误',
+                'PENDING': '等待中', 'COMPILING': '编译中', 'RUNNING': '运行中'
+            };
+            const statusDesc = statusText[tc.status] || tc.status;
+
             detailEl.innerHTML = `
                 <div class="detail-box">
                     <h4>测试点 #${tc.index || (idx+1)} (已选中)</h4>
-                    <div>状态: <span style="color:${getStatusColor(tc.status)}">${tc.status}</span> | 耗时: ${tc.time_ms}ms | 内存: ${tc.memory_kb}KB</div>
-                    <div class="detail-io">
-                        <div><strong>输入:</strong><pre>${escapeHtml(tc.input)}</pre></div>
-                        <div><strong>期望输出:</strong><pre>${escapeHtml(tc.expected)}</pre></div>
-                        <div><strong>实际输出:</strong><pre>${escapeHtml(tc.actual)}</pre></div>
-                    </div>
+                    <div>状态: <span style="color:${getStatusColor(tc.status)}">${tc.status} - ${statusDesc}</span> | 耗时: ${tc.time_ms}ms | 内存: ${tc.memory_kb}KB</div>
                 </div>`;
         }
 

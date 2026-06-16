@@ -5,11 +5,11 @@ async function renderLogin(main) {
             <div class="auth-box">
                 <div class="form-group">
                     <label>用户名</label>
-                    <input type="text" id="login-username" placeholder="用户名（至少3个字符）" minlength="3">
+                    <input type="text" id="login-username" placeholder="请输入用户名">
                 </div>
                 <div class="form-group">
                     <label>密码</label>
-                    <input type="password" id="login-password" placeholder="密码">
+                    <input type="password" id="login-password" placeholder="请输入密码">
                 </div>
                 <div id="login-error" class="error" style="display:none;"></div>
                 <button id="login-btn" class="btn-primary">登 录</button>
@@ -31,7 +31,7 @@ async function renderLogin(main) {
             await App.loadUser();
             App.navigate('#/problems');
         } catch(e) {
-            errorEl.textContent = e.message;
+            errorEl.textContent = '用户名或密码错误，请检查后重试';
             errorEl.style.display = '';
         }
     });

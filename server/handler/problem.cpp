@@ -7,7 +7,7 @@ void register_problem_routes(httplib::Server& svr) {
         AuthUser user = authenticate(req);
         if (!user.valid) {
             res.status = 401;
-            res.set_content("{\"error\":\"Not authenticated\"}", "application/json");
+            res.set_content("{\"error\":\"未登录\"}", "application/json");
             return;
         }
 
@@ -37,7 +37,7 @@ void register_problem_routes(httplib::Server& svr) {
         AuthUser user = authenticate(req);
         if (!user.valid) {
             res.status = 401;
-            res.set_content("{\"error\":\"Not authenticated\"}", "application/json");
+            res.set_content("{\"error\":\"未登录\"}", "application/json");
             return;
         }
 

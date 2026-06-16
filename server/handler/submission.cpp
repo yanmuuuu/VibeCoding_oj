@@ -14,7 +14,7 @@ void register_submission_routes(httplib::Server& svr) {
         AuthUser user = authenticate(req);
         if (!user.valid) {
             res.status = 401;
-            res.set_content("{\"error\":\"Not authenticated\"}", "application/json");
+            res.set_content("{\"error\":\"未登录\"}", "application/json");
             return;
         }
 
@@ -24,7 +24,7 @@ void register_submission_routes(httplib::Server& svr) {
 
         if (question_id <= 0 || code.empty()) {
             res.status = 400;
-            res.set_content("{\"error\":\"question_id and code required\"}", "application/json");
+            res.set_content("{\"error\":\"请提供题目ID和代码\"}", "application/json");
             return;
         }
 
@@ -37,7 +37,7 @@ void register_submission_routes(httplib::Server& svr) {
         if (!qres || mysql_num_rows(qres) == 0) {
             if (qres) mysql_free_result(qres);
             res.status = 404;
-            res.set_content("{\"error\":\"Problem not found\"}", "application/json");
+            res.set_content("{\"error\":\"题目不存在\"}", "application/json");
             return;
         }
 
@@ -49,7 +49,7 @@ void register_submission_routes(httplib::Server& svr) {
 
         if (!is_visible && !user.is_admin) {
             res.status = 404;
-            res.set_content("{\"error\":\"Problem not found\"}", "application/json");
+            res.set_content("{\"error\":\"题目不存在\"}", "application/json");
             return;
         }
 
@@ -71,7 +71,7 @@ void register_submission_routes(httplib::Server& svr) {
         AuthUser user = authenticate(req);
         if (!user.valid) {
             res.status = 401;
-            res.set_content("{\"error\":\"Not authenticated\"}", "application/json");
+            res.set_content("{\"error\":\"未登录\"}", "application/json");
             return;
         }
 

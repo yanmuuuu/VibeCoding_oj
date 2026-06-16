@@ -18,12 +18,12 @@ void register_auth_routes(httplib::Server& svr) {
 
             if (username.empty() || password.empty()) {
                 res.status = 400;
-                res.set_content("{\"error\":\"Username and password required\"}", "application/json");
+                res.set_content("{\"error\":\"用户名和密码不能为空\"}", "application/json");
                 return;
             }
             if (username.size() > 64) {
                 res.status = 400;
-                res.set_content("{\"error\":\"Username too long\"}", "application/json");
+                res.set_content("{\"error\":\"用户名过长\"}", "application/json");
                 return;
             }
 
@@ -42,7 +42,7 @@ void register_auth_routes(httplib::Server& svr) {
             if (check && mysql_num_rows(check) > 0) {
                 mysql_free_result(check);
                 res.status = 409;
-                res.set_content("{\"error\":\"Username already exists\"}", "application/json");
+                res.set_content("{\"error\":\"用户名已存在\"}", "application/json");
                 return;
             }
             if (check) mysql_free_result(check);
@@ -52,7 +52,7 @@ void register_auth_routes(httplib::Server& svr) {
                 hash = hash_password(password);
             } catch (const std::exception& e) {
                 res.status = 500;
-                res.set_content("{\"error\":\"Password hashing failed\"}", "application/json");
+                res.set_content("{\"error\":\"密码加密失败\"}", "application/json");
                 return;
             }
 
@@ -65,7 +65,7 @@ void register_auth_routes(httplib::Server& svr) {
                 if (err.find("Duplicate") != std::string::npos ||
                     err.find("duplicate") != std::string::npos) {
                     res.status = 409;
-                    res.set_content("{\"error\":\"Username already exists\"}", "application/json");
+                    res.set_content("{\"error\":\"用户名已存在\"}", "application/json");
                 } else {
                     res.status = 500;
                     res.set_content("{\"error\":\"" + json_escape(err) + "\"}", "application/json");
@@ -80,7 +80,7 @@ void register_auth_routes(httplib::Server& svr) {
             res.set_content("{\"error\":\"" + json_escape(std::string(e.what())) + "\"}", "application/json");
         } catch (...) {
             res.status = 500;
-            res.set_content("{\"error\":\"Internal Server Error\"}", "application/json");
+            res.set_content("{\"error\":\"服务器内部错误\"}", "application/json");
         }
     });
 
@@ -96,7 +96,7 @@ void register_auth_routes(httplib::Server& svr) {
 
             if (username.empty() || password.empty()) {
                 res.status = 400;
-                res.set_content("{\"error\":\"Username and password required\"}", "application/json");
+                res.set_content("{\"error\":\"请输入用户名和密码\"}", "application/json");
                 return;
             }
 
@@ -107,7 +107,7 @@ void register_auth_routes(httplib::Server& svr) {
             if (!result || mysql_num_rows(result) == 0) {
                 if (result) mysql_free_result(result);
                 res.status = 401;
-                res.set_content("{\"error\":\"Invalid username or password\"}", "application/json");
+                res.set_content("{\"error\":\"用户名或密码错误\"}", "application/json");
                 return;
             }
 
@@ -120,7 +120,7 @@ void register_auth_routes(httplib::Server& svr) {
 
             if (!verify_password(password, hash)) {
                 res.status = 401;
-                res.set_content("{\"error\":\"Invalid username or password\"}", "application/json");
+                res.set_content("{\"error\":\"用户名或密码错误\"}", "application/json");
                 return;
             }
 
@@ -139,7 +139,7 @@ void register_auth_routes(httplib::Server& svr) {
             res.set_content("{\"error\":\"" + json_escape(std::string(e.what())) + "\"}", "application/json");
         } catch (...) {
             res.status = 500;
-            res.set_content("{\"error\":\"Internal Server Error\"}", "application/json");
+            res.set_content("{\"error\":\"服务器内部错误\"}", "application/json");
         }
     });
 
@@ -148,7 +148,7 @@ void register_auth_routes(httplib::Server& svr) {
             AuthUser user = authenticate(req);
             if (!user.valid) {
                 res.status = 401;
-                res.set_content("{\"error\":\"Not authenticated\"}", "application/json");
+                res.set_content("{\"error\":\"未登录\"}", "application/json");
                 return;
             }
 
@@ -173,7 +173,7 @@ void register_auth_routes(httplib::Server& svr) {
             res.set_content("{\"error\":\"" + json_escape(std::string(e.what())) + "\"}", "application/json");
         } catch (...) {
             res.status = 500;
-            res.set_content("{\"error\":\"Internal Server Error\"}", "application/json");
+            res.set_content("{\"error\":\"服务器内部错误\"}", "application/json");
         }
     });
 }

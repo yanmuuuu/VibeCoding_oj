@@ -19,21 +19,6 @@ void JudgeEngine::submit(int submission_id, const std::string& code, int questio
     });
 }
 
-static std::string escape_json(const std::string& s) {
-    std::string out;
-    for (char c : s) {
-        switch (c) {
-            case '"': out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\n': out += "\\n"; break;
-            case '\r': out += "\\r"; break;
-            case '\t': out += "\\t"; break;
-            default: out += c;
-        }
-    }
-    return out;
-}
-
 void JudgeEngine::process(int submission_id, const std::string& code, int question_id,
                           int time_limit, int memory_limit) {
     auto db = g_db->acquire();
@@ -114,9 +99,6 @@ void JudgeEngine::process(int submission_id, const std::string& code, int questi
              << ",\"status\":\"" << results[i].status << "\""
              << ",\"time_ms\":" << results[i].time_ms
              << ",\"memory_kb\":" << results[i].memory_kb
-             << ",\"input\":\"" << escape_json(results[i].input_data) << "\""
-             << ",\"expected\":\"" << escape_json(results[i].expected_output) << "\""
-             << ",\"actual\":\"" << escape_json(results[i].actual_output) << "\""
              << "}";
     }
     json << "]";

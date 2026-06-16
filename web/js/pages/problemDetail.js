@@ -76,6 +76,21 @@ int main() {
     editor.renderer.setScrollMargin(8, 8, 0, 0);
     editor.session.setUseWrapMode(false);
 
+    const storageKey = 'code_' + id;
+    let saveTimeout = null;
+
+    const savedCode = localStorage.getItem(storageKey);
+    if (savedCode) {
+        editor.setValue(savedCode, -1);
+    }
+
+    editor.session.on('change', () => {
+        if (saveTimeout) clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+            localStorage.setItem(storageKey, editor.getValue());
+        }, 500);
+    });
+
     const submitBtn = $('#submit-btn');
 
     async function handleSubmit() {
@@ -84,6 +99,7 @@ int main() {
         try {
             submitBtn.disabled = true;
             submitBtn.textContent = '提交中...';
+            localStorage.setItem(storageKey, code);
             const result = await API.submit(parseInt(id), code);
             App.navigate('#/result/' + result.submission_id);
         } catch(e) {
