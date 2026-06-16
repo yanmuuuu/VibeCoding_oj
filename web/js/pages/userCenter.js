@@ -45,8 +45,8 @@ async function renderUserCenter(main) {
                 problemTbody.innerHTML = '<tr><td colspan="5">暂无提交记录</td></tr>';
             } else {
                 problemTbody.innerHTML = '';
-                problemStatuses.forEach((ps, idx) => {
-                    const row = el('tr', {className:'clickable'}, [
+                problemStatuses.forEach((ps) => {
+                    const row = el('tr', {className:'clickable'},
                         el('td', {textContent: ps.id}),
                         el('td', {textContent: ps.title}),
                         el('td', {innerHTML: difficultyBadge(ps.difficulty)}),
@@ -54,7 +54,7 @@ async function renderUserCenter(main) {
                             ? '<span style="color:#4caf50;font-weight:bold;">已通过</span>'
                             : '<span style="color:#f44336;font-weight:bold;">未通过</span>'}),
                         el('td', {innerHTML: `<strong>${ps.attempt_count}</strong> 次`})
-                    ]);
+                    );
                     row.addEventListener('click', () => App.navigate('#/problems/' + ps.id));
                     problemTbody.appendChild(row);
                 });
@@ -73,7 +73,7 @@ async function renderUserCenter(main) {
         }
         const totalSubs = allSubs.length || problemStatuses.reduce((s, p) => s + p.attempt_count, 0);
         const solvedCount = problemStatuses.filter(p => p.solved).length;
-        const attemptedCount = problemStatuses.length;
+        const attemptedCount = problemStatuses.filter(p => !p.solved).length;
         statsEl.innerHTML = `共 ${totalSubs} 次提交，通过 <strong>${solvedCount}</strong> 题，尝试 <strong>${attemptedCount}</strong> 题`;
     }
 
@@ -90,14 +90,14 @@ async function renderUserCenter(main) {
             subs.forEach(s => {
                 const color = getStatusColor(s.status);
                 const statusText = getStatusText(s.status);
-                const row = el('tr', {className:'clickable'}, [
+                const row = el('tr', {className:'clickable'},
                     el('td', {}, escapeHtml(s.title)),
                     el('td', {innerHTML: difficultyBadge(s.difficulty)}),
                     el('td', {innerHTML: `<span style="color:${color};font-weight:bold;">${s.status}</span> ${statusText}`}),
                     el('td', {textContent: s.total_time + 'ms/' + s.total_memory + 'KB'}),
                     el('td', {textContent: formatDate(s.created_at)}),
                     el('td', {innerHTML: '<span style="color:#1890ff;">查看详情 →</span>'})
-                ]);
+                );
                 row.addEventListener('click', () => App.navigate('#/result/' + s.id));
                 tbody.appendChild(row);
             });
