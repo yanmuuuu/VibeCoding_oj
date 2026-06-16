@@ -20,6 +20,7 @@ void register_problem_routes(httplib::Server& svr);
 void register_submission_routes(httplib::Server& svr);
 void register_user_routes(httplib::Server& svr);
 void register_admin_routes(httplib::Server& svr);
+void register_background_routes(httplib::Server& svr);
 
 static std::string render_template(const std::string& path) {
     ctemplate::Template* tpl = ctemplate::Template::GetTemplate(path, ctemplate::DO_NOT_STRIP);
@@ -95,6 +96,7 @@ int main() {
     register_submission_routes(svr);
     register_user_routes(svr);
     register_admin_routes(svr);
+    register_background_routes(svr);
 
     serve_spa(svr);
 

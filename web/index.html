@@ -12,16 +12,8 @@
     </script>
 </head>
 <body>
-    <canvas id="particles-canvas"></canvas>
-    <div id="sky-clouds">
-        <div class="cloud"></div>
-        <div class="cloud"></div>
-        <div class="cloud"></div>
-        <div class="cloud"></div>
-        <div class="cloud"></div>
-        <div class="cloud"></div>
-    </div>
-    <div id="star-layer"></div>
+    <div id="bg-layer"></div>
+    <div id="bg-overlay"></div>
 
     <div id="app">
         <header id="navbar" style="display:none;">
@@ -33,17 +25,46 @@
                 <a href="#/user">我的</a>
                 <a href="#/admin" id="nav-admin" style="display:none;">管理</a>
                 <a href="#" id="nav-logout">退出</a>
-                <button class="nav-settings-btn" id="nav-settings-btn" title="设置">⚙</button>
             </nav>
+            <button class="nav-settings-btn" id="nav-settings-btn" title="设置">⚙</button>
         </header>
+        <div id="crop-modal" style="display:none;">
+            <div class="crop-backdrop"></div>
+            <div class="crop-panel">
+                <div class="crop-header">
+                    <span>裁剪图片 — 选取你喜欢的区域</span>
+                    <button class="crop-close" id="crop-close">&times;</button>
+                </div>
+                <div class="crop-body">
+                    <canvas id="crop-canvas"></canvas>
+                </div>
+                <div class="crop-footer">
+                    <button class="btn-secondary" id="crop-cancel">取消</button>
+                    <button class="btn-primary" id="crop-confirm" style="width:auto; padding:8px 28px;">确认裁剪</button>
+                </div>
+            </div>
+        </div>
         <div id="settings-panel">
             <h4>设置</h4>
             <div class="setting-row">
-                <label for="setting-effects">背景特效</label>
+                <label>相册背景</label>
                 <label class="toggle-switch on" id="toggle-effects"></label>
             </div>
+            <div class="setting-row" id="setting-use-custom-bg" style="display:none;">
+                <label>使用我的壁纸</label>
+                <label class="toggle-switch on" id="toggle-use-custom-bg"></label>
+            </div>
             <div class="setting-row">
-                <label for="setting-autocomplete">代码自动补全</label>
+                <label>上传背景</label>
+                <button id="upload-bg-btn" class="btn-upload-bg">选择图片</button>
+                <input type="file" id="upload-bg-input" accept="image/*" style="display:none;">
+            </div>
+            <div class="setting-row setting-row-slider">
+                <label>背景虚化 <span id="blur-value-label">0px</span></label>
+                <input type="range" id="blur-slider" min="0" max="30" value="0">
+            </div>
+            <div class="setting-row">
+                <label>代码自动补全</label>
                 <label class="toggle-switch on" id="toggle-autocomplete"></label>
             </div>
         </div>

@@ -1,8 +1,8 @@
 const App = {
     user: null,
     currentPage: null,
-    init() {
-        this.loadUser();
+    async init() {
+        await this.loadUser();
         window.addEventListener('hashchange', () => this.route());
         this.route();
     },
@@ -13,15 +13,21 @@ const App = {
             this.user = null;
         }
         this.updateNav();
+        if (typeof window.refreshBackground === 'function') {
+            window.refreshBackground();
+        }
     },
     updateNav() {
         const navbar = $('#navbar');
+        const navLinks = $('#nav-links');
         const navAdmin = $('#nav-admin');
         if (this.user) {
             navbar.style.display = 'flex';
+            navLinks.style.display = 'flex';
             if (navAdmin) navAdmin.style.display = this.user.is_admin ? '' : 'none';
         } else {
-            navbar.style.display = 'none';
+            navbar.style.display = 'flex';
+            navLinks.style.display = 'none';
         }
     },
     async ensureAuth() {
@@ -75,6 +81,10 @@ const App = {
         }
 
         try {
+            if ((page === 'login' || page === 'register') && this.user) {
+                this.navigate('#/problems');
+                return;
+            }
             switch (page) {
                 case 'login': await renderLogin(main); break;
                 case 'register': await renderRegister(main); break;
@@ -110,6 +120,8 @@ function initSettings() {
     var btn = document.getElementById('nav-settings-btn');
     var toggleEff = document.getElementById('toggle-effects');
     var toggleAc = document.getElementById('toggle-autocomplete');
+    var uploadBtn = document.getElementById('upload-bg-btn');
+    var uploadInput = document.getElementById('upload-bg-input');
 
     if (!panel || !btn) return;
 
@@ -125,9 +137,9 @@ function initSettings() {
         }
     });
 
-    var effEnabled = localStorage.getItem('vibeoj_effects_enabled');
-    if (effEnabled === null) effEnabled = 'true';
-    if (effEnabled === 'true') {
+    var bgMode = localStorage.getItem('vibeoj_bg_mode');
+    if (bgMode === null) bgMode = 'album';
+    if (bgMode === 'album') {
         toggleEff.classList.add('on');
     } else {
         toggleEff.classList.remove('on');
@@ -140,11 +152,72 @@ function initSettings() {
         } else {
             toggleEff.classList.remove('on');
         }
-        localStorage.setItem('vibeoj_effects_enabled', on);
         if (typeof window.toggleEffects === 'function') {
             window.toggleEffects(on);
         }
     });
+
+    var toggleUseCustomBg = document.getElementById('toggle-use-custom-bg');
+    var settingUseCustomBg = document.getElementById('setting-use-custom-bg');
+    if (toggleUseCustomBg && settingUseCustomBg) {
+        if (typeof window.refreshUseCustomBgUI === 'function') {
+            window.refreshUseCustomBgUI();
+        }
+        toggleUseCustomBg.addEventListener('click', function() {
+            var on = !toggleUseCustomBg.classList.contains('on');
+            if (typeof window.setUseCustomBg === 'function') {
+                window.setUseCustomBg(on);
+            }
+        });
+    }
+
+    if (uploadBtn && uploadInput) {
+        uploadBtn.addEventListener('click', function() {
+            uploadInput.click();
+        });
+        uploadInput.addEventListener('change', function() {
+            if (uploadInput.files && uploadInput.files[0]) {
+                var file = uploadInput.files[0];
+                uploadInput.value = '';
+                if (typeof window.showCropModal === 'function' && typeof window.uploadBackground === 'function') {
+                    window.showCropModal(file).then(function(croppedFile) {
+                        var origText = uploadBtn.textContent;
+                        uploadBtn.textContent = '上传中...';
+                        uploadBtn.disabled = true;
+                        return window.uploadBackground(croppedFile).then(function() {
+                            uploadBtn.textContent = origText;
+                            uploadBtn.disabled = false;
+                            alert('背景上传成功');
+                        });
+                    }).catch(function(e) {
+                        if (e.message !== '用户取消') {
+                            alert('操作失败: ' + e.message);
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    var blurSlider = document.getElementById('blur-slider');
+    var blurLabel = document.getElementById('blur-value-label');
+    if (blurSlider && blurLabel) {
+        var savedBlur = localStorage.getItem('vibeoj_bg_blur');
+        if (savedBlur !== null) {
+            blurSlider.value = parseInt(savedBlur) || 0;
+            blurLabel.textContent = blurSlider.value + 'px';
+        }
+        blurSlider.addEventListener('input', function() {
+            blurLabel.textContent = blurSlider.value + 'px';
+        });
+        blurSlider.addEventListener('change', function() {
+            var px = parseInt(blurSlider.value);
+            localStorage.setItem('vibeoj_bg_blur', px);
+            if (typeof window.setBackgroundBlur === 'function') {
+                window.setBackgroundBlur(px);
+            }
+        });
+    }
 
     var acEnabled = localStorage.getItem('autocomplete_enabled');
     if (acEnabled === null) acEnabled = 'true';
@@ -162,6 +235,9 @@ function initSettings() {
             toggleAc.classList.remove('on');
         }
         localStorage.setItem('autocomplete_enabled', on);
+        if (typeof window.setAutocompleteEnabled === 'function') {
+            window.setAutocompleteEnabled(on);
+        }
     });
 }
 

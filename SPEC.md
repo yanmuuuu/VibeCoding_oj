@@ -124,6 +124,7 @@ CREATE TABLE users (
     username        VARCHAR(64)  NOT NULL UNIQUE,
     password_hash   VARCHAR(256) NOT NULL,          -- Argon2id
     is_admin        TINYINT(1)   NOT NULL DEFAULT 0,
+    background_url  VARCHAR(512) DEFAULT NULL,       -- 用户自定义背景图路径，NULL=使用系统相册随机图
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -226,7 +227,14 @@ CREATE TABLE submissions (
 | GET | `/api/user/ac-code/:question_id` | 获取用户在某题下最新 AC 提交的代码（返回 {found, code}） | 需要 |
 | GET | `/api/user/ac-codes/:question_id` | 获取用户在某题下所有 AC 提交的代码列表（返回 [{id, code, total_time, total_memory, created_at}]，按提交时间倒序） | 需要 |
 
-### 6.5 管理员
+### 6.5 背景管理
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|---|---|---|---|
+| GET | `/api/backgrounds` | 获取系统背景图片列表（无需登录；仅返回系统图片，不包含用户上传的 `user_*` 文件） | 无 |
+| POST | `/api/backgrounds/upload` | 上传自定义背景图（multipart form，field: background） | 需要 |
+
+### 6.6 管理员
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |---|---|---|---|
@@ -375,6 +383,7 @@ VibeOJ/
 │       ├── json_extract.hpp          # 健壮 JSON 字符串/整数提取器（处理空格、转义字符）
 │       └── tmpfile.hpp/.cpp          # 临时文件管理（mkstemps + RAII 自动清理）
 ├── web/                              # 前端静态文件（SPA）
+│   ├── backgrounds/                   # 背景相册目录（用户可放入图片，自动虚化作为随机背景）
 │   ├── index.html                    # SPA 入口（ctemplate 渲染 → Hash Router 接管，含 ACE CDN 引入）
 │   ├── css/
 │   │   └── style.css                 # 全局样式（LeetCode 风格简约浅色主题）
@@ -382,7 +391,7 @@ VibeOJ/
 │       ├── router.js                 # Hash Router：路由匹配、Auth 守卫、页面调度、设置面板
 │       ├── api.js                    # HTTP 请求封装（fetch + JSON）
 │       ├── utils.js                  # DOM 工具函数
-│       ├── effects.js               # 背景特效系统（Canvas 粒子漂浮 + CSS 云层动画 + 特效开关
+│       ├── effects.js               # 背景管理系统（系统相册+自定义上传+图片裁剪+图片预加载+登录后刷新+虚化滑块+LeetCode白模式切换+使用我的壁纸开关）
 │       ├── pages/
 │       │   ├── login.js              # 登录页
 │       │   ├── register.js           # 注册页
@@ -401,7 +410,10 @@ VibeOJ/
 
 ## 10. 前端页面线框
 
-> **视觉风格**：全局采用新海诚（Makoto Shinkai）动画风格——动态天空渐变背景（深蓝 → 暖橙 → 金色）、毛玻璃面板 (backdrop-filter)、暖金 (#fdbb2d) 主色调、柔和阴影与圆角设计。背景特效包括 Canvas 粒子漂浮动画（白色光点 + 金色辉光脉冲）和 CSS 飘云层（6 朵交错漂浮云）。用户可通过导航栏 ⚙ 设置面板手动关闭背景特效。
+> **视觉风格**：支持两种背景模式，通过导航栏 ⚙ 设置面板切换：
+>   - **相册模式（默认）**：从 `web/backgrounds/` 目录随机选取图片作为页面背景，自动添加 CSS 高斯模糊（blur 18px）+ 亮度降低（brightness 0.35），确保在前端暗色毛玻璃面板上文字清晰可读。
+>   - **LeetCode 经典白模式**：纯白/浅灰配色，白色背景 (#f7f8fa)，无毛玻璃效果，面板使用纯白卡片+浅灰边框风格，与 LeetCode 官网视觉效果一致。
+>   - 支持用户通过设置面板上传自定义背景图（存储到 `web/backgrounds/` 目录），上传前弹出 Canvas 裁剪对话框（锁定视口宽高比，支持拖拽移动 + 四角/四边缩放），裁剪后上传并立即应用。
 
 ### 登录页 `#/login`
 ```
@@ -737,6 +749,39 @@ VibeOJ/
 - [x] `index.html` 新增 Canvas 粒子层、云层、星星层、设置面板 DOM (`index.html`)
 - [x] BUILD PASS：编译通过，服务启动正常
 
+### Phase 19 — 背景系统改造
+- [x] 移除 Canvas 粒子漂浮动画、CSS 飘云层、星星层等旧特效（`index.html` + `style.css` + `effects.js`）
+- [x] 创建 `web/backgrounds/` 相册目录，支持用户放入 JPG/PNG/WebP 等图片
+- [x] 后端 `GET /api/backgrounds`：列出系统相册 `web/backgrounds/` 下所有图片（`handler/background.cpp`）
+- [x] 后端 `POST /api/backgrounds/upload`：上传自定义背景图（multipart form），写入 `users.background_url`，替换时自动删除旧文件（`handler/background.cpp`）
+- [x] `users` 表新增 `background_url` 字段（VARCHAR(512) DEFAULT NULL）：NULL=使用系统相册随机图，非NULL=使用该用户专属背景
+- [x] 用户 profile 接口新增返回 `background_url` 字段（`handler/user.cpp`）
+- [x] 前端背景优先级：`users.background_url`（非NULL）> 系统相册随机图 > 无图时默认暗色背景（`effects.js`）
+- [x] 前端背景系统：图片保持原画质（默认无虚化），通过独立暗色遮罩层 `#bg-overlay`（rgba(0,0,0,0.45)）确保前景文字可读，避免 brightness 滤镜损伤画质（`effects.js` + `style.css` + `index.html`）
+- [x] LeetCode 经典白模式：设置面板关闭「相册背景」后切换到纯白/浅灰配色，卡片去除毛玻璃效果（`style.css` body.lc-white 系列规则）
+- [x] 设置面板改动：「背景特效」→「相册背景」toggle + 「上传背景」按钮 + 「代码自动补全」修复联动（`router.js` + `index.html`）
+- [x] 代码自动补全修复：设置面板开关通过 `window.setAutocompleteEnabled()` 真正控制 ACE 编辑器（`router.js` + `problemDetail.js`）
+- [x] 设置面板新增「背景虚化」滑块（0~30px，默认 0px），用户可自定义高斯模糊强度，独立于暗色遮罩层，实时生效并持久化到 localStorage（`effects.js` + `router.js` + `index.html` + `style.css`）
+- [x] 登录页自动跳转：已登录用户（Cookie 有效）访问 `#/login` 或 `#/register` 时自动跳转到 `#/problems`（`router.js`）
+- [x] 图片裁剪功能：上传背景图时弹出 Canvas 裁剪对话框，裁剪框锁定视口宽高比（`window.innerWidth / window.innerHeight`），确保裁出的区域能完美填充整个页面背景。支持拖拽移动裁剪框、四角+四边缩放（保持宽高比），金色半透明遮罩+手柄交互。裁剪后转为 JPEG（92%质量）上传，无外部依赖，纯 Canvas API 实现（`effects.js` + `index.html` + `style.css` + `router.js`）
+- [x] 图片预加载：背景图片通过 `Image()` 对象预加载，`onload` 完成后再设置 `background-image`，避免 CSS transition 期间图片未准备好的空白闪烁（`effects.js`）
+- [x] 登录后背景刷新：`App.loadUser()` 完成后调用 `window.refreshBackground()`，确保登录/注册成功后立即检查并加载用户的个性化背景，无需手动刷新页面（`effects.js` + `router.js`）
+- [x] BUILD PASS：编译通过
+
+### Phase 20 — 壁纸管理增强
+- [x] 后端 `GET /api/backgrounds` 去掉鉴权：未登录用户也能获取系统壁纸列表，确保登录/注册页面可显示系统背景图
+- [x] 后端 `GET /api/backgrounds` 过滤 `user_*` 文件：只返回系统图片（排除其他用户上传的 `user_{id}.*` 文件），保护用户隐私
+- [x] 前端导航栏始终显示齿轮按钮：`#nav-settings-btn` 移到 `#nav-links` 外部，未登录时 `#nav-links` 隐藏但齿轮仍可点击，登录/注册页面用户也能开关壁纸
+- [x] 前端 `loadBackground()` 未登录兜底：profile 接口 401 时直接请求系统壁纸列表（`GET /api/backgrounds`），确保未登录时也能显示系统壁纸
+- [x] 新增「使用我的壁纸」toggle：设置面板中独立于「相册背景」toggle 的新开关，仅当用户上传过自定义壁纸时显示
+  - ON（默认）：显示用户上传的自定义壁纸
+  - OFF：显示系统随机壁纸（不显示自定义壁纸）
+  - 关闭再打开：恢复之前上传的自定义壁纸（无需重新上传）
+- [x] 上传壁纸后自动开启「使用我的壁纸」开关，立即显示自定义壁纸
+- [x] 图片预加载始终加载目标壁纸（自定义壁纸 ON→加载自定义，OFF→加载系统随机），避免短暂闪烁
+- [x] `vibeoj_custom_bg_url` localStorage 缓存：持久化用户自定义壁纸 URL，刷新页面后开关状态和壁纸选择正确恢复
+- [x] BUILD PASS：编译通过，0 warning
+
 ---
 
 ## 12. 验收标准
@@ -768,8 +813,18 @@ VibeOJ/
 | AC-23 | 多版本 AC 代码列表 | 点击「加载已通过代码」弹出下拉列表展示用户在该题所有 AC 提交（含 ID、时间、性能），点击任一条填入编辑器 |
 | AC-24 | AC 代码撤销 | 加载 AC 代码后「↩ 撤销」按钮出现，点击恢复到加载前用户自己的代码 |
 | AC-25 | 自动补全开关 | 编辑器旁复选框 + 设置面板开关可控制 ACE 自动补全开/关，状态持久化到 localStorage，两者双向同步 |
-| AC-26 | 新海诚视觉风格 | 全局动态天空渐变背景 + 毛玻璃面板 + 暖金主色调 (#fdbb2d) + Canvas 粒子漂浮 + CSS 飘云动画 |
-| AC-27 | 特效开关 | 导航栏 ⚙ 设置面板中「背景特效」开关可关闭/开启 Canvas 粒子与 CSS 云层动画，状态持久化到 localStorage |
+| AC-26 | 相册背景 | 从 `web/backgrounds/` 目录随机选取图片作为页面背景，自动施加 CSS 模糊（blur 18px）+ 暗化（brightness 0.35），确保前景文字清晰可读 |
+| AC-27 | LeetCode 经典白模式 | 关闭「相册背景」开关后页面切换到纯白/浅灰 LeetCode 风格：白色背景、纯白卡片面板、无毛玻璃效果、文字深色 |
+| AC-28 | 自定义背景上传+裁剪 | 设置面板中可上传图片，上传前弹出裁剪对话框（锁定视口宽高比），用户可拖拽/缩放选取区域，确认后裁剪并上传，立即设置为背景 |
+| AC-29 | 背景模式持久化 | 背景模式（相册/LeetCode白）和自定义背景 URL 持久化到 localStorage，刷新后恢复 |
+| AC-30 | 背景虚化可调节 | 设置面板滑块可调节背景虚化强度（0~30px，默认 0），实时预览，持久化到 localStorage |
+| AC-31 | 登录页自动跳转 | 已登录用户（Cookie 有效 Session 未过期）访问 `#/login` 或 `#/register` 自动跳转到 `#/problems` |
+| AC-32 | 图片预加载 | 背景图片通过 Image 对象预加载完成后才设置 CSS background-image，消除加载过程中的空白闪烁 |
+| AC-33 | 登录后背景刷新 | 登录/注册成功后自动调用 `refreshBackground()` 加载用户个性化背景，无需手动刷新页面 |
+| AC-34 | 未登录壁纸可见 | 未登录时登录/注册页面能正常显示系统壁纸（`GET /api/backgrounds` 无需鉴权，仅返回系统图片） |
+| AC-35 | 未登录可开关壁纸 | 登录/注册页面导航栏显示齿轮按钮，用户可打开设置面板切换「相册背景」开关 |
+| AC-36 | 使用我的壁纸开关 | 上传自定义壁纸后，设置面板出现「使用我的壁纸」toggle；开启显示自定义壁纸，关闭显示系统随机壁纸；关闭后再开启，恢复之前上传的自定义壁纸 |
+| AC-37 | 系统壁纸不泄露 | `GET /api/backgrounds` 仅返回系统图片（`pt*.jpg` 等），不返回其他用户上传的 `user_*` 文件 |
 
 ---
 

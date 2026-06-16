@@ -121,6 +121,16 @@ int main() {
             enableLiveAutocompletion: enabled
         });
     }
+
+    function syncAcToggleUI(enabled) {
+        autocompleteCheck.checked = enabled;
+        var toggle = document.getElementById('toggle-autocomplete');
+        if (toggle) {
+            if (enabled) toggle.classList.add('on');
+            else toggle.classList.remove('on');
+        }
+    }
+
     autocompleteCheck.addEventListener('change', () => {
         const enabled = autocompleteCheck.checked;
         localStorage.setItem(acPrefKey, enabled);
@@ -128,7 +138,17 @@ int main() {
             enableBasicAutocompletion: enabled,
             enableLiveAutocompletion: enabled
         });
+        syncAcToggleUI(enabled);
     });
+
+    window.setAutocompleteEnabled = function(enabled) {
+        editor.setOptions({
+            enableBasicAutocompletion: enabled,
+            enableLiveAutocompletion: enabled
+        });
+        syncAcToggleUI(enabled);
+    };
+    window._aceEditor = editor;
 
     const submitBtn = $('#submit-btn');
 

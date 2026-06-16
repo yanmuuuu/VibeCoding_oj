@@ -6,6 +6,7 @@ CREATE TABLE users (
     username        VARCHAR(64)  NOT NULL UNIQUE,
     password_hash   VARCHAR(256) NOT NULL,
     is_admin        TINYINT(1)   NOT NULL DEFAULT 0,
+    background_url  VARCHAR(512) DEFAULT NULL,
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -40,4 +40,5 @@ const API = {
     createTestCase(qid, data) { return this.post('/api/admin/questions/' + qid + '/testcases', data); },
     updateTestCase(qid, tid, data) { return this.put('/api/admin/questions/' + qid + '/testcases/' + tid, data); },
     deleteTestCase(qid, tid) { return this.del('/api/admin/questions/' + qid + '/testcases/' + tid); },
+    getBackgrounds() { return this.get('/api/backgrounds'); },
 };
