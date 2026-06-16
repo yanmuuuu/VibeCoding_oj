@@ -67,6 +67,67 @@ void register_user_routes(httplib::Server& svr) {
         res.set_content(json.str(), "application/json");
     });
 
+    svr.Get(R"(/api/user/ac-code/(\d+))", [](const httplib::Request& req, httplib::Response& res) {
+        AuthUser user = authenticate(req);
+        if (!user.valid) {
+            res.status = 401;
+            res.set_content("{\"error\":\"未登录\"}", "application/json");
+            return;
+        }
+
+        int question_id = std::stoi(req.matches[1]);
+        auto db = g_db->acquire();
+        db->query("SELECT code FROM submissions WHERE user_id=" + std::to_string(user.id) +
+                  " AND question_id=" + std::to_string(question_id) +
+                  " AND status='AC' ORDER BY id DESC LIMIT 1");
+
+        MYSQL_RES* result = db->store_result();
+        std::ostringstream json;
+        if (result && mysql_num_rows(result) > 0) {
+            MYSQL_ROW row = mysql_fetch_row(result);
+            json << "{\"found\":true,\"code\":\"" << json_escape(row[0] ? row[0] : "") << "\"}";
+        } else {
+            json << "{\"found\":false,\"code\":\"\"}";
+        }
+        if (result) mysql_free_result(result);
+        res.set_content(json.str(), "application/json");
+    });
+
+    svr.Get(R"(/api/user/ac-codes/(\d+))", [](const httplib::Request& req, httplib::Response& res) {
+        AuthUser user = authenticate(req);
+        if (!user.valid) {
+            res.status = 401;
+            res.set_content("{\"error\":\"未登录\"}", "application/json");
+            return;
+        }
+
+        int question_id = std::stoi(req.matches[1]);
+        auto db = g_db->acquire();
+        db->query("SELECT id, code, total_time, total_memory, created_at "
+                  "FROM submissions WHERE user_id=" + std::to_string(user.id) +
+                  " AND question_id=" + std::to_string(question_id) +
+                  " AND status='AC' ORDER BY id DESC");
+
+        MYSQL_RES* result = db->store_result();
+        std::ostringstream json;
+        json << "[";
+        bool first = true;
+        MYSQL_ROW row;
+        while (result && (row = mysql_fetch_row(result))) {
+            if (!first) json << ",";
+            first = false;
+            json << "{\"id\":" << (row[0] ? row[0] : "0")
+                 << ",\"code\":\"" << json_escape(row[1] ? row[1] : "") << "\""
+                 << ",\"total_time\":" << (row[2] ? row[2] : "0")
+                 << ",\"total_memory\":" << (row[3] ? row[3] : "0")
+                 << ",\"created_at\":\"" << (row[4] ? row[4] : "") << "\""
+                 << "}";
+        }
+        json << "]";
+        if (result) mysql_free_result(result);
+        res.set_content(json.str(), "application/json");
+    });
+
     svr.Get("/api/user/problem-status", [](const httplib::Request& req, httplib::Response& res) {
         AuthUser user = authenticate(req);
         if (!user.valid) {

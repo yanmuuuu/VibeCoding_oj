@@ -12,6 +12,17 @@
     </script>
 </head>
 <body>
+    <canvas id="particles-canvas"></canvas>
+    <div id="sky-clouds">
+        <div class="cloud"></div>
+        <div class="cloud"></div>
+        <div class="cloud"></div>
+        <div class="cloud"></div>
+        <div class="cloud"></div>
+        <div class="cloud"></div>
+    </div>
+    <div id="star-layer"></div>
+
     <div id="app">
         <header id="navbar" style="display:none;">
             <div class="nav-brand">
@@ -22,8 +33,20 @@
                 <a href="#/user">我的</a>
                 <a href="#/admin" id="nav-admin" style="display:none;">管理</a>
                 <a href="#" id="nav-logout">退出</a>
+                <button class="nav-settings-btn" id="nav-settings-btn" title="设置">⚙</button>
             </nav>
         </header>
+        <div id="settings-panel">
+            <h4>设置</h4>
+            <div class="setting-row">
+                <label for="setting-effects">背景特效</label>
+                <label class="toggle-switch on" id="toggle-effects"></label>
+            </div>
+            <div class="setting-row">
+                <label for="setting-autocomplete">代码自动补全</label>
+                <label class="toggle-switch on" id="toggle-autocomplete"></label>
+            </div>
+        </div>
         <main id="content">
             <div id="loading">加载中...</div>
         </main>
@@ -41,5 +64,6 @@
     <script src="/js/pages/admin.js"></script>
     <script src="/js/pages/adminQuestions.js"></script>
     <script src="/js/pages/adminQuestionEdit.js"></script>
+    <script src="/js/effects.js"></script>
 </body>
 </html>

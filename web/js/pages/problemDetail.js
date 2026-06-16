@@ -52,7 +52,25 @@ int main() {
 }</div>
                         <div class="editor-actions">
                             <button id="submit-btn" class="btn-primary">提交代码</button>
-                            <span style="font-size:0.82em;color:#8c8c8c;">Ctrl+Enter 提交</span>
+                            <button id="load-ac-btn" class="btn-ac-load">加载已通过代码</button>
+                            <button id="undo-ac-btn" class="btn-undo" style="display:none;" title="撤销到加载前的代码">↩ 撤销</button>
+                            <label class="autocomplete-toggle" title="切换代码自动补全">
+                                <input type="checkbox" id="autocomplete-check" checked>
+                                <span>自动补全</span>
+                            </label>
+                            <span class="shortcut-hint">Ctrl+Enter 提交</span>
+                        </div>
+                    </div>
+                    <div id="ac-codes-modal" class="ac-codes-modal" style="display:none;">
+                        <div class="ac-codes-backdrop"></div>
+                        <div class="ac-codes-dropdown">
+                            <div class="ac-codes-header">
+                                <span>已通过的提交记录</span>
+                                <button class="ac-codes-close">&times;</button>
+                            </div>
+                            <div class="ac-codes-list" id="ac-codes-list">
+                                <div class="ac-codes-loading">加载中...</div>
+                            </div>
                         </div>
                     </div>
                     ${testCasesHtml}
@@ -78,6 +96,7 @@ int main() {
 
     const storageKey = 'code_' + id;
     let saveTimeout = null;
+    let preAcCode = null;
 
     const savedCode = localStorage.getItem(storageKey);
     if (savedCode) {
@@ -89,6 +108,26 @@ int main() {
         saveTimeout = setTimeout(() => {
             localStorage.setItem(storageKey, editor.getValue());
         }, 500);
+    });
+
+    const autocompleteCheck = $('#autocomplete-check');
+    const acPrefKey = 'autocomplete_enabled';
+    const savedAcPref = localStorage.getItem(acPrefKey);
+    if (savedAcPref !== null) {
+        const enabled = savedAcPref === 'true';
+        autocompleteCheck.checked = enabled;
+        editor.setOptions({
+            enableBasicAutocompletion: enabled,
+            enableLiveAutocompletion: enabled
+        });
+    }
+    autocompleteCheck.addEventListener('change', () => {
+        const enabled = autocompleteCheck.checked;
+        localStorage.setItem(acPrefKey, enabled);
+        editor.setOptions({
+            enableBasicAutocompletion: enabled,
+            enableLiveAutocompletion: enabled
+        });
     });
 
     const submitBtn = $('#submit-btn');
@@ -110,6 +149,67 @@ int main() {
     }
 
     submitBtn.addEventListener('click', handleSubmit);
+
+    const loadAcBtn = $('#load-ac-btn');
+    const undoAcBtn = $('#undo-ac-btn');
+    const acModal = $('#ac-codes-modal');
+    const acBackdrop = acModal.querySelector('.ac-codes-backdrop');
+    const acClose = acModal.querySelector('.ac-codes-close');
+    const acList = $('#ac-codes-list');
+
+    function closeModal() {
+        acModal.style.display = 'none';
+    }
+
+    acBackdrop.addEventListener('click', closeModal);
+    acClose.addEventListener('click', closeModal);
+
+    loadAcBtn.addEventListener('click', async () => {
+        loadAcBtn.disabled = true;
+        loadAcBtn.textContent = '加载中...';
+        acList.innerHTML = '<div class="ac-codes-loading">加载中...</div>';
+        acModal.style.display = 'block';
+        try {
+            const codes = await API.getAcceptedCodes(parseInt(id));
+            if (codes.length === 0) {
+                acList.innerHTML = '<div class="ac-codes-empty">该题目暂无已通过的提交</div>';
+            } else {
+                acList.innerHTML = codes.map((s, i) => `
+                    <div class="ac-code-item" data-index="${i}">
+                        <div class="ac-code-meta">
+                            <span class="ac-code-id">#${s.id}</span>
+                            <span class="ac-code-date">${formatDate(s.created_at)}</span>
+                            <span class="ac-code-perf">${s.total_time}ms / ${s.total_memory}KB</span>
+                        </div>
+                        <span class="ac-code-arrow">→</span>
+                    </div>
+                `).join('');
+                acList.querySelectorAll('.ac-code-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        const idx = parseInt(item.dataset.index);
+                        preAcCode = editor.getValue();
+                        editor.setValue(codes[idx].code, -1);
+                        editor.clearSelection();
+                        undoAcBtn.style.display = 'inline-block';
+                        closeModal();
+                    });
+                });
+            }
+        } catch(e) {
+            acList.innerHTML = '<div class="ac-codes-empty">加载失败: ' + escapeHtml(e.message) + '</div>';
+        }
+        loadAcBtn.disabled = false;
+        loadAcBtn.textContent = '加载已通过代码';
+    });
+
+    undoAcBtn.addEventListener('click', () => {
+        if (preAcCode !== null) {
+            editor.setValue(preAcCode, -1);
+            editor.clearSelection();
+            preAcCode = null;
+            undoAcBtn.style.display = 'none';
+        }
+    });
 
     editor.commands.addCommand({
         name: 'submit',

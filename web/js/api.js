@@ -29,6 +29,8 @@ const API = {
     getSubmission(id) { return this.get('/api/submissions/' + id); },
     getUserProfile() { return this.get('/api/user/profile'); },
     getUserSubmissions(page) { return this.get('/api/user/submissions?page=' + (page||1)); },
+    getAcceptedCode(qid) { return this.get('/api/user/ac-code/' + qid); },
+    getAcceptedCodes(qid) { return this.get('/api/user/ac-codes/' + qid); },
     getAdminQuestions() { return this.get('/api/admin/questions'); },
     getAdminQuestion(id) { return this.get('/api/admin/questions/' + id); },
     createQuestion(data) { return this.post('/api/admin/questions', data); },

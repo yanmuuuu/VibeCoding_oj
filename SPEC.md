@@ -223,6 +223,8 @@ CREATE TABLE submissions (
 | GET | `/api/user/submissions` | 我的提交历史（分页） | 需要 |
 | GET | `/api/user/problem-status` | 每题汇总提交状态（id, title, difficulty, solved, attempt_count） | 需要 |
 | GET | `/api/user/profile` | 当前用户信息 | 需要 |
+| GET | `/api/user/ac-code/:question_id` | 获取用户在某题下最新 AC 提交的代码（返回 {found, code}） | 需要 |
+| GET | `/api/user/ac-codes/:question_id` | 获取用户在某题下所有 AC 提交的代码列表（返回 [{id, code, total_time, total_memory, created_at}]，按提交时间倒序） | 需要 |
 
 ### 6.5 管理员
 
@@ -377,9 +379,10 @@ VibeOJ/
 │   ├── css/
 │   │   └── style.css                 # 全局样式（LeetCode 风格简约浅色主题）
 │   └── js/
-│       ├── router.js                 # Hash Router：路由匹配、Auth 守卫、页面调度
+│       ├── router.js                 # Hash Router：路由匹配、Auth 守卫、页面调度、设置面板
 │       ├── api.js                    # HTTP 请求封装（fetch + JSON）
 │       ├── utils.js                  # DOM 工具函数
+│       ├── effects.js               # 背景特效系统（Canvas 粒子漂浮 + CSS 云层动画 + 特效开关
 │       ├── pages/
 │       │   ├── login.js              # 登录页
 │       │   ├── register.js           # 注册页
@@ -397,6 +400,8 @@ VibeOJ/
 ---
 
 ## 10. 前端页面线框
+
+> **视觉风格**：全局采用新海诚（Makoto Shinkai）动画风格——动态天空渐变背景（深蓝 → 暖橙 → 金色）、毛玻璃面板 (backdrop-filter)、暖金 (#fdbb2d) 主色调、柔和阴影与圆角设计。背景特效包括 Canvas 粒子漂浮动画（白色光点 + 金色辉光脉冲）和 CSS 飘云层（6 朵交错漂浮云）。用户可通过导航栏 ⚙ 设置面板手动关闭背景特效。
 
 ### 登录页 `#/login`
 ```
@@ -448,7 +453,8 @@ VibeOJ/
 │                            │  │ │ }                                │ │   │
 │  【样例】                   │  │ └──────────────────────────────────┘ │   │
 │  输入: 1 2                  │  │                                      │   │
-│  输出: 3                    │  │ [ 提交代码 ]  Ctrl+Enter 提交         │   │
+│  输出: 3                    │  │ [ 提交代码 ] [加载已通过代码] [↩撤销] │   │
+│                            │  │ [✓ 自动补全]    Ctrl+Enter 提交  │   │
 │                            │  └──────────────────────────────────────┘   │
 │  限制: 1s / 256MB          │                                              │
 │                            │  ┌─ 测试样例 ───────────────────────────┐   │
@@ -465,6 +471,10 @@ VibeOJ/
 ```
 
 > **代码持久化**：每个题目的代码自动保存到浏览器 `localStorage`（键 `code_{题目ID}`）。切换题目或返回时自动恢复，提交后不清除（500ms debounce）。
+>
+> **加载已通过代码**：提交按钮旁提供「加载已通过代码」按钮，点击后通过 `GET /api/user/ac-codes/:question_id` 获取当前用户在该题下**所有** AC 提交记录，以弹出下拉列表展示（含提交 ID、时间、性能数据），点击任一条即自动填入 ACE 编辑器；若用户尚无 AC 记录则提示「该题目暂无已通过的提交」。加载后「↩撤销」按钮出现，点击可回退到加载前的用户自己编写的代码（单级撤销）。
+>
+> **自动补全开关**：编辑器旁提供「自动补全」复选框，可手动关闭/开启 ACE 编辑器的代码自动补全功能（包括 basic autocompletion 和 live autocompletion）。开关状态持久化到 `localStorage`。
 >
 > **测试样例**：公开样例来自 `questions.sample_input`/`sample_output`。完整测试用例列表仅在管理员编辑页通过 `GET /api/admin/questions/:id/testcases` 获取，普通用户不可见。
 
@@ -709,6 +719,24 @@ VibeOJ/
 - [x] 用户中心统计：`attemptedCount` 改为仅统计 `!p.solved` 的题目，避免已通过题目同时计入"通过"和"尝试"（互斥语义）
 - [x] 题目列表页新增搜索框（标题关键词实时过滤）+ 难度下拉筛选（全部/简单/中等/困难），客户端即时过滤
 
+### Phase 17 — 已通过代码加载
+- [x] 后端 `GET /api/user/ac-code/:question_id`：查询用户在某题下最新 AC 提交 (`user.cpp`)
+- [x] 前端 API `getAcceptedCode(qid)` (`api.js`)
+- [x] 题目详情页「加载已通过代码」按钮，点击加载并填入 ACE 编辑器 (`problemDetail.js`)
+
+### Phase 18 — 多版本 AC 代码加载 + 撤销 + 新海诚风格视觉改造
+- [x] 后端 `GET /api/user/ac-codes/:question_id`：查询用户在某题下所有 AC 提交，返回 id/code/total_time/total_memory/created_at 列表 (`user.cpp`)
+- [x] 前端 API `getAcceptedCodes(qid)` (`api.js`)
+- [x] 题目详情页「加载已通过代码」按钮改为弹出下拉列表展示所有 AC 提交（含提交 ID、时间、性能）；点击任一条自动填入编辑器 (`problemDetail.js`)
+- [x] 新增「↩ 撤销」按钮：加载 AC 代码后出现，点击恢复加载前用户自己的代码（单级撤销）(`problemDetail.js`)
+- [x] ACE 编辑器旁新增「自动补全」复选框，可手动关闭/开启自动补全，状态持久化到 `localStorage` (`problemDetail.js`)
+- [x] 新增设置面板：导航栏 ⚙ 按钮弹出下拉面板，含「背景特效」「代码自动补全」两个开关，自定义 toggle-switch 组件 (`router.js`)
+- [x] 全局 CSS 改造为新海诚（Makoto Shinkai）动画风格：动态天空渐变背景、毛玻璃面板 (backdrop-filter)、暖金 (#fdbb2d) 主色调、柔和阴影、圆角设计、透明/半透明 UI 元素 (`style.css`)
+- [x] 背景特效系统：Canvas 粒子漂浮动画（80 粒子，脉冲光晕 + 暖色辉光）+ CSS 飘云层（6 朵云交错漂浮动画）(`effects.js`)
+- [x] 设置面板开关：背景特效（控制 Canvas 粒子 + CSS 云层显示/隐藏，持久化到 `localStorage`）、代码自动补全开关与编辑器内复选框双向同步 (`router.js` + `effects.js` + `problemDetail.js`)
+- [x] `index.html` 新增 Canvas 粒子层、云层、星星层、设置面板 DOM (`index.html`)
+- [x] BUILD PASS：编译通过，服务启动正常
+
 ---
 
 ## 12. 验收标准
@@ -736,6 +764,12 @@ VibeOJ/
 | AC-19 | 结果轮询 | 跳转到 `#/result/:id` 后前端轮询 `/api/submissions/:id`（2s 间隔），状态非 PENDING/COMPILING/RUNNING 时停止，渲染结果方块网格 |
 | AC-20 | 代码持久化 | 离开题目详情页再返回，代码编辑器恢复之前内容（localStorage 保存/读取） |
 | AC-21 | 用户中心统计 | 用户中心顶部显示提交总次数、已通过题数、尝试过的题数 |
+| AC-22 | 加载已通过代码 | 题目详情页点击「加载已通过代码」→ 从后端获取最新 AC 代码并填入编辑器；无 AC 记录时弹窗提示 |
+| AC-23 | 多版本 AC 代码列表 | 点击「加载已通过代码」弹出下拉列表展示用户在该题所有 AC 提交（含 ID、时间、性能），点击任一条填入编辑器 |
+| AC-24 | AC 代码撤销 | 加载 AC 代码后「↩ 撤销」按钮出现，点击恢复到加载前用户自己的代码 |
+| AC-25 | 自动补全开关 | 编辑器旁复选框 + 设置面板开关可控制 ACE 自动补全开/关，状态持久化到 localStorage，两者双向同步 |
+| AC-26 | 新海诚视觉风格 | 全局动态天空渐变背景 + 毛玻璃面板 + 暖金主色调 (#fdbb2d) + Canvas 粒子漂浮 + CSS 飘云动画 |
+| AC-27 | 特效开关 | 导航栏 ⚙ 设置面板中「背景特效」开关可关闭/开启 Canvas 粒子与 CSS 云层动画，状态持久化到 localStorage |
 
 ---
 

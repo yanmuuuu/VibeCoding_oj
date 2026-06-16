@@ -105,4 +105,67 @@ document.addEventListener('click', async (e) => {
     }
 });
 
-window.addEventListener('DOMContentLoaded', () => App.init());
+function initSettings() {
+    var panel = document.getElementById('settings-panel');
+    var btn = document.getElementById('nav-settings-btn');
+    var toggleEff = document.getElementById('toggle-effects');
+    var toggleAc = document.getElementById('toggle-autocomplete');
+
+    if (!panel || !btn) return;
+
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!panel.contains(e.target) && e.target !== btn) {
+            panel.style.display = 'none';
+        }
+    });
+
+    var effEnabled = localStorage.getItem('vibeoj_effects_enabled');
+    if (effEnabled === null) effEnabled = 'true';
+    if (effEnabled === 'true') {
+        toggleEff.classList.add('on');
+    } else {
+        toggleEff.classList.remove('on');
+    }
+
+    toggleEff.addEventListener('click', function() {
+        var on = !toggleEff.classList.contains('on');
+        if (on) {
+            toggleEff.classList.add('on');
+        } else {
+            toggleEff.classList.remove('on');
+        }
+        localStorage.setItem('vibeoj_effects_enabled', on);
+        if (typeof window.toggleEffects === 'function') {
+            window.toggleEffects(on);
+        }
+    });
+
+    var acEnabled = localStorage.getItem('autocomplete_enabled');
+    if (acEnabled === null) acEnabled = 'true';
+    if (acEnabled === 'true') {
+        toggleAc.classList.add('on');
+    } else {
+        toggleAc.classList.remove('on');
+    }
+
+    toggleAc.addEventListener('click', function() {
+        var on = !toggleAc.classList.contains('on');
+        if (on) {
+            toggleAc.classList.add('on');
+        } else {
+            toggleAc.classList.remove('on');
+        }
+        localStorage.setItem('autocomplete_enabled', on);
+    });
+}
+
+window.addEventListener('DOMContentLoaded', function() {
+    App.init();
+    initSettings();
+});
