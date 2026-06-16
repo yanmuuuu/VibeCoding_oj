@@ -24,7 +24,6 @@ void register_admin_routes(httplib::Server& svr);
 static std::string render_template(const std::string& path) {
     ctemplate::Template* tpl = ctemplate::Template::GetTemplate(path, ctemplate::DO_NOT_STRIP);
     if (!tpl) {
-        // Fallback: serve raw file
         return "";
     }
     std::string output;
@@ -34,14 +33,11 @@ static std::string render_template(const std::string& path) {
 }
 
 static void serve_spa(httplib::Server& svr) {
-    // Serve static files from web/ directory
     svr.set_mount_point("/", g_config.web_root.c_str());
 
-    // SPA fallback: for any non-API, non-file route, serve index.html
     svr.Get("/", [](const httplib::Request&, httplib::Response& res) {
         std::string html = render_template(g_config.web_root + "/index.html");
         if (html.empty()) {
-            // Try direct file read
             std::ifstream file(g_config.web_root + "/index.html");
             if (file) {
                 std::ostringstream ss;
@@ -54,6 +50,9 @@ static void serve_spa(httplib::Server& svr) {
 }
 
 int main() {
+    // Ignore SIGPIPE to prevent crashes when clients disconnect mid-response
+    signal(SIGPIPE, SIG_IGN);
+
     // Init temp directory
     if (!init_tmp_dir(g_config.tmp_dir)) {
         std::cerr << "Failed to create temp directory: " << g_config.tmp_dir << std::endl;
@@ -72,32 +71,36 @@ int main() {
     // Init judge engine
     g_judge = new JudgeEngine(g_config.judge_workers);
 
-    // Create HTTP server
     httplib::Server svr;
 
-    // Set up error handlers
-    svr.set_error_handler([](const httplib::Request&, httplib::Response& res) {
-        if (res.status == 404) {
-            res.set_content(R"({"error":"Not Found"})", "application/json");
-        } else if (res.status >= 500) {
-            res.set_content(R"({"error":"Internal Server Error"})", "application/json");
+    // Keep-alive timeout to prevent stale connections
+    svr.set_keep_alive_timeout(5);
+
+    // Error handler: always return valid JSON for API routes, HTML for others
+    svr.set_error_handler([](const httplib::Request& /*req*/, httplib::Response& res) {
+        // Only set content if handler didn't already set it
+        if (res.body.empty()) {
+            if (res.status == 404) {
+                res.set_content(R"({"error":"Not Found"})", "application/json");
+            } else if (res.status >= 500) {
+                res.set_content(R"({"error":"Internal Server Error"})", "application/json");
+            } else {
+                res.set_content(R"({"error":"Request failed"})", "application/json");
+            }
         }
     });
 
-    // Register all API routes
     register_auth_routes(svr);
     register_problem_routes(svr);
     register_submission_routes(svr);
     register_user_routes(svr);
     register_admin_routes(svr);
 
-    // Serve static files and SPA
     serve_spa(svr);
 
     std::cout << "VibeOJ Server running on http://0.0.0.0:" << g_config.port << std::endl;
     svr.listen("0.0.0.0", g_config.port);
 
-    // Cleanup
     delete g_judge;
     delete g_db;
     return 0;

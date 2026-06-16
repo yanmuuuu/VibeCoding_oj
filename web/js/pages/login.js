@@ -5,7 +5,7 @@ async function renderLogin(main) {
             <div class="auth-box">
                 <div class="form-group">
                     <label>用户名</label>
-                    <input type="text" id="login-username" placeholder="用户名">
+                    <input type="text" id="login-username" placeholder="用户名（至少3个字符）" minlength="3">
                 </div>
                 <div class="form-group">
                     <label>密码</label>

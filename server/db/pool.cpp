@@ -26,8 +26,8 @@ unsigned long long DbConn::affected_rows() {
 
 std::string DbConn::escape(const std::string& s) {
     std::string buf(s.size() * 2 + 1, '\0');
-    mysql_real_escape_string(conn_, &buf[0], s.c_str(), s.size());
-    buf.resize(strlen(buf.c_str()));
+    unsigned long len = mysql_real_escape_string(conn_, &buf[0], s.c_str(), s.size());
+    buf.resize(len);
     return buf;
 }
 

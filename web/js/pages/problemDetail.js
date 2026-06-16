@@ -44,12 +44,12 @@ async function renderProblemDetail(main) {
                 <div class="problem-right">
                     <div class="editor-wrapper">
                         <h3>代码编辑器 (C++)</h3>
-                        <textarea id="code-editor" placeholder="#include &lt;iostream&gt;
+                        <div id="code-editor">#include &lt;iostream&gt;
 using namespace std;
 int main() {
-    // 在这里编写你的代码
+    
     return 0;
-}"></textarea>
+}</div>
                         <div class="editor-actions">
                             <button id="submit-btn" class="btn-primary">提交代码</button>
                             <span style="font-size:0.82em;color:#8c8c8c;">Ctrl+Enter 提交</span>
@@ -60,11 +60,26 @@ int main() {
             </div>
         </div>`;
 
+    const editor = ace.edit('code-editor');
+    editor.setTheme('ace/theme/chrome');
+    editor.session.setMode('ace/mode/c_cpp');
+    editor.setOptions({
+        fontSize: '14px',
+        tabSize: 4,
+        useSoftTabs: true,
+        showPrintMargin: false,
+        highlightActiveLine: true,
+        enableBasicAutocompletion: true,
+        enableSnippets: true,
+        enableLiveAutocompletion: true
+    });
+    editor.renderer.setScrollMargin(8, 8, 0, 0);
+    editor.session.setUseWrapMode(false);
+
     const submitBtn = $('#submit-btn');
-    const codeEditor = $('#code-editor');
 
     async function handleSubmit() {
-        const code = codeEditor.value.trim();
+        const code = editor.getValue().trim();
         if (!code) { alert('请输入代码'); return; }
         try {
             submitBtn.disabled = true;
@@ -80,7 +95,9 @@ int main() {
 
     submitBtn.addEventListener('click', handleSubmit);
 
-    codeEditor.addEventListener('keydown', (e) => {
-        if (e.ctrlKey && e.key === 'Enter') handleSubmit();
+    editor.commands.addCommand({
+        name: 'submit',
+        bindKey: {win: 'Ctrl-Enter', mac: 'Command-Enter'},
+        exec: handleSubmit
     });
 }

@@ -193,17 +193,19 @@ void register_admin_routes(httplib::Server& svr) {
         std::string json = "[";
         bool first = true;
         MYSQL_ROW row;
-        while ((row = mysql_fetch_row(result))) {
-            if (!first) json += ",";
-            first = false;
-            json += "{\"id\":" + std::string(row[0]) +
-                    ",\"title\":\"" + std::string(row[1] ? row[1] : "") + "\"" +
-                    ",\"is_visible\":" + std::string(row[2] ? row[2] : "1") +
-                    ",\"time_limit\":" + std::string(row[3] ? row[3] : "1") +
-                    ",\"memory_limit\":" + std::string(row[4] ? row[4] : "256") + "}";
+        if (result) {
+            while ((row = mysql_fetch_row(result))) {
+                if (!first) json += ",";
+                first = false;
+                json += "{\"id\":" + std::string(row[0]) +
+                        ",\"title\":\"" + std::string(row[1] ? row[1] : "") + "\"" +
+                        ",\"is_visible\":" + std::string(row[2] ? row[2] : "1") +
+                        ",\"time_limit\":" + std::string(row[3] ? row[3] : "1") +
+                        ",\"memory_limit\":" + std::string(row[4] ? row[4] : "256") + "}";
+            }
         }
         json += "]";
-        mysql_free_result(result);
+        if (result) mysql_free_result(result);
         res.set_content(json, "application/json");
     });
 
@@ -352,16 +354,18 @@ void register_admin_routes(httplib::Server& svr) {
         std::string json = "[";
         bool first = true;
         MYSQL_ROW row;
-        while ((row = mysql_fetch_row(result))) {
-            if (!first) json += ",";
-            first = false;
-            json += "{\"id\":" + std::string(row[0]) +
-                    ",\"input_data\":\"" + esc(row[1]) + "\"" +
-                    ",\"expected_output\":\"" + esc(row[2]) + "\"" +
-                    ",\"order_index\":" + std::string(row[3] ? row[3] : "0") + "}";
+        if (result) {
+            while ((row = mysql_fetch_row(result))) {
+                if (!first) json += ",";
+                first = false;
+                json += "{\"id\":" + std::string(row[0]) +
+                        ",\"input_data\":\"" + esc(row[1]) + "\"" +
+                        ",\"expected_output\":\"" + esc(row[2]) + "\"" +
+                        ",\"order_index\":" + std::string(row[3] ? row[3] : "0") + "}";
+            }
         }
         json += "]";
-        mysql_free_result(result);
+        if (result) mysql_free_result(result);
         res.set_content(json, "application/json");
     });
 }

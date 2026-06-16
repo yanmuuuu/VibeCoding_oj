@@ -3,6 +3,7 @@
 #include "../middleware/auth.hpp"
 #include "../judge/engine.hpp"
 #include "../config.hpp"
+#include "../util/json_extract.hpp"
 #include <string>
 #include <sstream>
 
@@ -18,49 +19,8 @@ void register_submission_routes(httplib::Server& svr) {
         }
 
         auto body = req.body;
-        auto extract_int = [&body](const std::string& key) -> int {
-            std::string search = "\"" + key + "\":";
-            auto pos = body.find(search);
-            if (pos == std::string::npos) return -1;
-            pos += search.size();
-            while (pos < body.size() && (body[pos] == ' ' || body[pos] == '\t')) pos++;
-            auto end = body.find_first_of(",}\n\r", pos);
-            std::string num = body.substr(pos, end - pos);
-            try { return std::stoi(num); } catch (...) { return -1; }
-        };
-        auto extract_str = [&body](const std::string& key) -> std::string {
-            std::string search = "\"" + key + "\":\"";
-            auto pos = body.find(search);
-            if (pos == std::string::npos) {
-                search = "\"" + key + "\": \"";
-                pos = body.find(search);
-            }
-            if (pos == std::string::npos) return "";
-            pos += search.size();
-            std::string out;
-            while (pos < body.size()) {
-                if (body[pos] == '\\' && pos + 1 < body.size()) {
-                    pos++;
-                    switch (body[pos]) {
-                        case '"': out += '"'; break;
-                        case '\\': out += '\\'; break;
-                        case 'n': out += '\n'; break;
-                        case 'r': out += '\r'; break;
-                        case 't': out += '\t'; break;
-                        default: out += body[pos];
-                    }
-                } else if (body[pos] == '"') {
-                    break;
-                } else {
-                    out += body[pos];
-                }
-                pos++;
-            }
-            return out;
-        };
-
-        int question_id = extract_int("question_id");
-        std::string code = extract_str("code");
+        int question_id = extract_json_int(body, "question_id");
+        std::string code = extract_json_string(body, "code");
 
         if (question_id <= 0 || code.empty()) {
             res.status = 400;
@@ -134,7 +94,7 @@ void register_submission_routes(httplib::Server& svr) {
         MYSQL_ROW row = mysql_fetch_row(result);
 
         // Only owner or admin can view
-        int owner_id = std::stoi(row[1]);
+        int owner_id = row[1] ? std::stoi(row[1]) : 0;
         if (owner_id != user.id && !user.is_admin) {
             mysql_free_result(result);
             res.status = 403;
@@ -159,9 +119,9 @@ void register_submission_routes(httplib::Server& svr) {
         };
 
         std::ostringstream json;
-        json << "{\"id\":" << row[0]
-             << ",\"user_id\":" << row[1]
-             << ",\"question_id\":" << row[2]
+        json << "{\"id\":" << (row[0] ? row[0] : "0")
+             << ",\"user_id\":" << (row[1] ? row[1] : "0")
+             << ",\"question_id\":" << (row[2] ? row[2] : "0")
              << ",\"code\":\"" << esc(row[3]) << "\""
              << ",\"status\":\"" << (row[4] ? row[4] : "") << "\""
              << ",\"compile_error\":\"" << esc(row[5]) << "\""

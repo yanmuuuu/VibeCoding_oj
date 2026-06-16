@@ -11,7 +11,7 @@
 class DbConn {
 public:
     DbConn(MYSQL* conn) : conn_(conn) {}
-    ~DbConn() { if (conn_) mysql_close(conn_); }
+    ~DbConn() {}
     MYSQL* get() { return conn_; }
 
     void query(const std::string& sql);

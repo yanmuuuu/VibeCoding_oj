@@ -4,12 +4,16 @@ async function renderRegister(main) {
             <h1>VibeOJ</h1>
             <div class="auth-box">
                 <div class="form-group">
-                    <label>用户名</label>
-                    <input type="text" id="reg-username" placeholder="用户名">
+                    <label>用户名（至少3个字符）</label>
+                    <input type="text" id="reg-username" placeholder="用户名" minlength="3" maxlength="64">
                 </div>
                 <div class="form-group">
-                    <label>密码</label>
-                    <input type="password" id="reg-password" placeholder="密码">
+                    <label>密码（至少8位，含至少两种字符类型）</label>
+                    <input type="password" id="reg-password" placeholder="密码" minlength="8">
+                </div>
+                <div id="reg-hint" style="font-size:0.78em;color:#8c8c8c;margin-bottom:12px;line-height:1.6;">
+                    密码要求：≥8位，至少包含以下两种类型：<br>
+                    数字 0-9 · 小写字母 a-z · 大写字母 A-Z · 特殊符号 _- .@!#$%^&*+=~
                 </div>
                 <div id="reg-error" class="error" style="display:none;"></div>
                 <button id="reg-btn" class="btn-primary">注 册</button>
@@ -21,13 +25,20 @@ async function renderRegister(main) {
         const username = $('#reg-username').value.trim();
         const password = $('#reg-password').value;
         const errorEl = $('#reg-error');
-        if (!username || !password) {
-            errorEl.textContent = '请输入用户名和密码';
+        errorEl.style.display = 'none';
+
+        if (username.length < 3) {
+            errorEl.textContent = '用户名至少3个字符';
             errorEl.style.display = '';
             return;
         }
         if (username.length > 64) {
-            errorEl.textContent = '用户名过长';
+            errorEl.textContent = '用户名过长（最多64个字符）';
+            errorEl.style.display = '';
+            return;
+        }
+        if (password.length < 8) {
+            errorEl.textContent = '密码至少8位';
             errorEl.style.display = '';
             return;
         }

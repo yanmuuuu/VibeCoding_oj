@@ -18,16 +18,18 @@ void register_problem_routes(httplib::Server& svr) {
         std::string json = "[";
         bool first = true;
         MYSQL_ROW row;
-        while ((row = mysql_fetch_row(result))) {
-            if (!first) json += ",";
-            first = false;
-            json += "{\"id\":" + std::string(row[0]) +
-                    ",\"title\":\"" + std::string(row[1] ? row[1] : "") + "\"" +
-                    ",\"time_limit\":" + std::string(row[2] ? row[2] : "1") +
-                    ",\"memory_limit\":" + std::string(row[3] ? row[3] : "256") + "}";
+        if (result) {
+            while ((row = mysql_fetch_row(result))) {
+                if (!first) json += ",";
+                first = false;
+                json += "{\"id\":" + std::string(row[0]) +
+                        ",\"title\":\"" + std::string(row[1] ? row[1] : "") + "\"" +
+                        ",\"time_limit\":" + std::string(row[2] ? row[2] : "1") +
+                        ",\"memory_limit\":" + std::string(row[3] ? row[3] : "256") + "}";
+            }
         }
         json += "]";
-        mysql_free_result(result);
+        if (result) mysql_free_result(result);
         res.set_content(json, "application/json");
     });
 

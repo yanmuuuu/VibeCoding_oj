@@ -7,7 +7,7 @@
 | **项目名称** | VibeOJ |
 | **定位** | 个人学习项目 |
 | **模式** | ACM（stdin/stdout），仅 C++ |
-| **前端** | 原生 HTML + CSS + JS（SPA + Hash 路由） |
+| **前端** | 原生 HTML + CSS + JS（SPA + Hash 路由）+ ACE Editor (CDN) |
 | **后端** | C++ (cpp-httplib) 一体化：API Server + 静态文件 + ctemplate 模板 |
 | **数据库** | MySQL |
 | **部署** | 单机 |
@@ -22,6 +22,10 @@
 - 退出：清除 Cookie + 删除 sessions 记录
 - 管理员：`users.is_admin` 字段区分，可登录后台管理页
 - 每次请求从 Cookie 读 token 查 `sessions` 表校验登录态
+- **账号规则**：
+  - 用户名：≥3 字符，≤64 字符（VARCHAR(64)）
+  - 密码：≥8 字符，必须包含至少两种字符类型（数字 0-9、小写 a-z、大写 A-Z、特殊符号 `_` `-` `.` `@` `!` `#` `$` `%` `^` `&` `*` `+` `=` `~`）
+  - 前后端双重校验，非法字符返回 400 并提示具体原因
 
 ### 2.2 题目浏览
 - 题目列表页：展示所有题目（编号、标题、难度可选）
@@ -249,20 +253,23 @@ CREATE TABLE submissions (
                  │ success                    │
                  ▼                            │
   ┌──────────────────────────────┐           │
-  │ 2. 运行阶段 (RUNNING)          │           │
-  │  for each test_case:          │           │
-  │    - fork() 子进程             │           │
-  │    - setrlimit:                │           │
-  │      · RLIMIT_CPU = time_limit│           │
-  │      · RLIMIT_AS  = mem_limit │           │
-  │      · RLIMIT_CORE = 0        │           │
-  │      · RLIMIT_NPROC = 0       │           │
-  │      · RLIMIT_FSIZE = 0       │           │
-  │    - dup2 stdin → input_data   │           │
-  │    - dup2 stdout → output_buf │           │
-  │    - exec(binary)              │           │
-  │    - wait4 → 获取时间/内存/退出码│          │
-  │    - 判断结果:                  │           │
+│  2. 运行阶段 (RUNNING)          │           │
+│  for each test_case:          │           │
+│    - fork() 子进程             │           │
+│    - setrlimit:                │           │
+│      · RLIMIT_CPU = time_limit│           │
+│      · RLIMIT_AS  = mem_limit │           │
+│      · RLIMIT_CORE = 0        │           │
+│      · RLIMIT_NPROC = 1       │           │
+│      · RLIMIT_FSIZE = 10MB    │           │
+│    - dup2 stdin → input_data   │           │
+│    - dup2 stdout → output_buf │           │
+│    - exec(binary)              │           │
+│    - wait4 (WNOHANG 轮询 +      │           │
+│      墙钟超时 time_limit+2s,    │           │
+│      超时则 SIGKILL)            │           │
+│    - 获取时间/内存/退出码       │           │
+│    - 判断结果:                  │           │
   │      · 超时 → TLE              │           │
   │      · 内存超 → MLE            │           │
   │      · 非0退出 → RE            │           │
@@ -286,9 +293,8 @@ CREATE TABLE submissions (
 | `RLIMIT_CPU` | time_limit 秒 | 死循环、无限递归 |
 | `RLIMIT_AS` | memory_limit MB | 内存炸弹、大数组 |
 | `RLIMIT_CORE` | 0 | 禁止 core dump 生成大文件 |
-| `RLIMIT_NPROC` | 1 或 0 | 禁止 `fork()` 炸弹 |
-| `RLIMIT_FSIZE` | 0（运行阶段） | 禁止创建/写入文件 |
-| `RLIMIT_NOFILE` | 0 | 禁止打开除 stdin/stdout/stderr 外的文件 |
+| `RLIMIT_NPROC` | 1 | 禁止 `fork()` 炸弹 |
+| `RLIMIT_FSIZE` | 10MB | 限制文件写入大小，同时允许正常输出
 
 ---
 
@@ -299,7 +305,7 @@ CREATE TABLE submissions (
 | `#/` 或 `#/login` | 登录页 | 未登录默认 |
 | `#/register` | 注册页 | |
 | `#/problems` | 题目列表 | 需要登录 |
-| `#/problems/:id` | 题目详情 + 提交区 | 左右分栏：左题目描述，右代码编辑器 |
+| `#/problems/:id` | 题目详情 + 提交区 | 左右分栏：左题目描述，右 ACE 代码编辑器 |
 | `#/result/:submissionId` | 判题结果页 | 测试点方块网格 + 详情展开（提交后跳转到此页） |
 | `#/user` | 用户中心 | 提交历史 |
 | `#/admin` | 后台管理首页 | 仅管理员 |
@@ -346,9 +352,10 @@ VibeOJ/
 │   │   └── auth.cpp                  # Token 校验：Cookie 提取 → sessions 表查询 → 挂载用户
 │   └── util/
 │       ├── crypto.hpp/.cpp           # Argon2id 密码哈希、SHA256 Token 生成、OpenSSL 随机数
+│       ├── json_extract.hpp          # 健壮 JSON 字符串/整数提取器（处理空格、转义字符）
 │       └── tmpfile.hpp/.cpp          # 临时文件管理（mkstemps + RAII 自动清理）
 ├── web/                              # 前端静态文件（SPA）
-│   ├── index.html                    # SPA 入口（ctemplate 渲染 → Hash Router 接管）
+│   ├── index.html                    # SPA 入口（ctemplate 渲染 → Hash Router 接管，含 ACE CDN 引入）
 │   ├── css/
 │   │   └── style.css                 # 全局样式（LeetCode 风格简约浅色主题）
 │   └── js/
@@ -359,7 +366,7 @@ VibeOJ/
 │       │   ├── login.js              # 登录页
 │       │   ├── register.js           # 注册页
 │       │   ├── problems.js           # 题目列表
-│       │   ├── problemDetail.js      # 题目详情 + 代码编辑器 + 提交
+│       │   ├── problemDetail.js      # 题目详情 + ACE 代码编辑器 + 提交
 │       │   ├── result.js             # 判题结果（方块网格 + 轮询 + 详情展开）
 │       │   ├── userCenter.js         # 用户中心（提交历史分页）
 │       │   ├── admin.js              # 后台管理首页（题目列表 + 删除）
@@ -406,9 +413,9 @@ VibeOJ/
 ┌──────────────────────────────────────────────────────────────────────────┐
 │  ← 返回题目列表     A+B Problem                                          │
 ├────────────────────────────┬─────────────────────────────────────────────┤
-│  左侧：题目面板 (scroll)     │  右侧：代码编辑器面板                         │
+│  左侧：题目面板 (scroll)     │  右侧：ACE 代码编辑器面板                     │
 │                            │  ┌──────────────────────────────────────┐   │
-│  【题目描述】                │  │ 代码编辑器 (C++)                      │   │
+│  【题目描述】                │  │ 代码编辑器 (C++) - ACE Editor         │   │
 │  给定两个整数 a 和 b，      │  │ ┌──────────────────────────────────┐ │   │
 │  输出 a+b。                 │  │ │ #include <iostream>              │ │   │
 │                            │  │ │ using namespace std;             │ │   │
@@ -586,12 +593,44 @@ VibeOJ/
 
 ### Phase 8 — UI 优化
 - [x] LeetCode 风格简约浅色主题（白底黑字，绿/蓝强调色代替红色）
-- [x] 题目详情页：代码编辑器区域独立面板，提交按钮紧跟编辑器下方（Ctrl+Enter 快捷提交）
+- [x] 题目详情页：ACE Editor 替代 textarea，支持语法高亮、行号
+- [x] ACE Editor：加载 ext-language_tools.js 扩展，支持 C++ 自动补全、代码片段、实时提示
+- [x] 题目详情页：提交按钮紧跟编辑器下方（Ctrl+Enter 快捷提交）
 - [x] 用户中心页：添加返回题目列表链接
 - [x] 后台管理页：添加返回题目列表链接
 - [x] 导航栏深色配色（#282c34），与 LeetCode 一致
 
-### Phase 9 — 延后（V2）
+### Phase 9 — 稳定性修复
+- [x] DB 连接池生命周期修复：DbConn 析构不再关闭连接，由 DbPool 统一管理（修复使用 8 次连接后全池枯竭导致 500 的严重 bug）
+- [x] JSON 解析器重构：`extract_json_string/int` 统一实现至 `util/json_extract.hpp`，正确处理冒号前后空格、转义字符
+- [x] 注册接口：INSERT 捕获 Duplicate 异常，消除 check-then-act 竞态条件
+- [x] 提交接口：JSON 解析改用共享工具函数
+
+### Phase 10 — Segfault 修复
+- [x] `db/pool.cpp` escape(): 用 `mysql_real_escape_string()` 返回值替代 `strlen()`，修复非 null-terminated 缓冲区溢出导致 segfault
+- [x] `judge/runner.cpp` 移除 `RLIMIT_NOFILE=0`：该 rlimit 阻断子进程 `dup2` I/O 重定向，导致子进程继承父进程 MySQL socket 等 fd，污染连接引发 segfault
+- [x] `judge/runner.cpp` `RLIMIT_FSIZE` 改为 10MB：旧值 0 禁止子进程写入任何输出
+- [x] `judge/runner.cpp` 添加墙钟超时：`wait4(WNOHANG)` 轮询 + `time_limit+2s` 超时后 `SIGKILL`，防止子进程 `sleep()` 等零 CPU 挂起耗尽判题线程
+- [x] `judge/runner.cpp` 临时目录改用 `g_config.tmp_dir`，不再硬编码 `/tmp/oj`
+- [x] `judge/threadpool.cpp` worker 函数外添加 try/catch，防止异常终止整个 worker 线程
+- [x] `handler/submission.cpp` / `problem.cpp` / `admin.cpp`：`mysql_fetch_row()` 返回值和 `row[i]` 加 NULL 守卫，消除空指针解引用
+
+### Phase 11 — 连接稳定性修复
+- [x] `main.cpp` 添加 `signal(SIGPIPE, SIG_IGN)`：忽略 SIGPIPE 信号，修复客户端断开连接时服务端被 SIGPIPE 杀死导致 segfault 和前端 "Unexpected end of JSON input" 错误
+- [x] `main.cpp` 添加 `set_keep_alive_timeout(5)`：5 秒 keep-alive 超时，防止僵死连接积累
+- [x] `main.cpp` error handler 仅对空 body 响应设置默认 JSON body，不再覆盖 handler 已设置的自定义错误内容
+- [x] `handler/auth.cpp` 注册/登录/退出 handler 全部添加外层 try/catch，异常不再向上传播导致 cpp-httplib 返回空响应体
+- [x] `util/json_extract.hpp` 新增 `json_escape()` 函数，对 `"`, `\`, `\n`, `\r`, `\t`, 控制字符进行 JSON 转义
+- [x] `handler/auth.cpp` 响应 JSON 拼接处全部使用 `json_escape()`：用户名 `row[1]`、`e.what()` 异常消息等动态值统一转义，杜绝特殊字符破坏 JSON 结构
+- [x] `handler/auth.cpp` 增加 `req.body.empty()` 空 body 检测，提前返回 400 而非静默返回空响应
+
+### Phase 12 — 密码强度校验
+- [x] `util/json_extract.hpp` 新增 `validate_password()` 函数，校验用户名 ≥3 字符、密码 ≥8 字符、至少 2 种字符类型（数字/小写/大写/特殊符号）、无非法字符
+- [x] `handler/auth.cpp` 注册 handler 调用 `validate_password()`，不合格返回 400 + 具体原因
+- [x] `web/js/pages/register.js` 前端注册页展示密码规则提示 + 客户端预校验
+- [x] `web/js/pages/login.js` 登录页用户名框加 minlength 提示
+
+### Phase 13 — 延后（V2）
 - [ ] 私信/消息系统
 - [ ] 排行榜
 - [ ] 多语言
@@ -603,7 +642,7 @@ VibeOJ/
 
 | 编号 | 验收项 | 标准 |
 |---|---|---|
-| AC-1 | 注册/登录 | 用户名+密码注册，登录后获得 token，刷新浏览器保持登录态 |
+| AC-1 | 注册/登录 | 用户名 ≥3 字符 + 密码 ≥8 字符 ≥2 种字符类型，注册后登录获得 token，刷新保持登录态 |
 | AC-2 | 未登录拦截 | 未登录访问任何需鉴权页面跳转 `#/login` |
 | AC-3 | 题目列表 | 仅显示 `is_visible=1` 的题目，含编号、标题、限制 |
 | AC-4 | 题目详情 | 显示完整描述、输入输出格式、样例、限制 |
@@ -652,6 +691,8 @@ VibeOJ/
 | `cpp-httplib` | HTTP Server + 静态文件 | 已有头文件 | ✅ 已有（需复制到项目） |
 | `ctemplate` | HTML 模板引擎（骨架注入） | 源码编译到 `/usr/local` | ✅ 已安装 |
 | `libssl-dev` | OpenSSL 头文件（SHA256 / 随机数） | apt | ✅ 已安装 |
+
+| `ACE Editor` | 代码编辑器（语法高亮/自动补全） | CDN (cdnjs) | ✅ 已集成（v1.36.2） |
 
 | `cmake` (≥3.14) | 构建系统（二选一） | apt | ⬜ 可选安装 |
 

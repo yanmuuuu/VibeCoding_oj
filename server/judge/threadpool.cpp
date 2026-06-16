@@ -12,7 +12,13 @@ ThreadPool::ThreadPool(size_t threads) {
                     task = std::move(tasks_.front());
                     tasks_.pop();
                 }
-                task();
+                try {
+                    task();
+                } catch (const std::exception& e) {
+                    // Log but don't kill the worker thread
+                } catch (...) {
+                    // Ignore unknown exceptions to keep worker alive
+                }
             }
         });
     }
