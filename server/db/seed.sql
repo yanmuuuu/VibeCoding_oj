@@ -5,9 +5,9 @@
 -- INSERT INTO users (username, password_hash, is_admin) VALUES ('admin', '$argon2id$...', 1);
 
 -- Sample problems
-INSERT INTO questions (title, description, input_format, output_format, sample_input, sample_output, time_limit, memory_limit, is_visible) VALUES
-('A+B Problem', '给定两个整数 a 和 b，输出 a+b 的结果。', '一行，包含两个整数 a 和 b，以空格分隔。', '一个整数，表示 a+b 的结果。', '1 2', '3', 1, 256, 1),
-('最大子数组和', '给定一个整数数组，找到和最大的连续子数组，并返回其最大和。', '第一行一个整数 n，表示数组长度。第二行 n 个整数，以空格分隔。', '一个整数，表示最大子数组和。', '9\n-2 1 -3 4 -1 2 1 -5 4', '6', 1, 256, 1);
+INSERT INTO questions (title, description, input_format, output_format, sample_input, sample_output, difficulty, time_limit, memory_limit, is_visible) VALUES
+('A+B Problem', '给定两个整数 a 和 b，输出 a+b 的结果。', '一行，包含两个整数 a 和 b，以空格分隔。', '一个整数，表示 a+b 的结果。', '1 2', '3', '简单', 1, 256, 1),
+('最大子数组和', '给定一个整数数组，找到和最大的连续子数组，并返回其最大和。', '第一行一个整数 n，表示数组长度。第二行 n 个整数，以空格分隔。', '一个整数，表示最大子数组和。', '9\n-2 1 -3 4 -1 2 1 -5 4', '6', '中等', 1, 256, 1);
 
 -- Test cases for Problem 1 (A+B Problem)
 INSERT INTO test_cases (question_id, input_data, expected_output, order_index) VALUES

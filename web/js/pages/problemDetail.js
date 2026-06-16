@@ -20,7 +20,7 @@ async function renderProblemDetail(main) {
         <div class="problem-detail">
             <div class="problem-header">
                 <a href="#/problems" class="back-link">← 返回题目列表</a>
-                <h2>${escapeHtml(p.title)}</h2>
+                <h2>${escapeHtml(p.title)} ${difficultyBadge(p.difficulty)}</h2>
                 <div></div>
             </div>
             <div class="problem-layout">

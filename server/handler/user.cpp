@@ -37,7 +37,7 @@ void register_user_routes(httplib::Server& svr) {
         int offset = (page - 1) * per_page;
 
         auto db = g_db->acquire();
-        db->query("SELECT s.id, s.question_id, q.title, s.status, "
+        db->query("SELECT s.id, s.question_id, q.title, q.difficulty, s.status, "
                   "s.total_time, s.total_memory, s.created_at "
                   "FROM submissions s JOIN questions q ON s.question_id = q.id "
                   "WHERE s.user_id=" + std::to_string(user.id) +
@@ -55,14 +55,54 @@ void register_user_routes(httplib::Server& svr) {
             json << "{\"id\":" << row[0]
                  << ",\"question_id\":" << row[1]
                  << ",\"title\":\"" << json_escape(row[2] ? row[2] : "") << "\""
-                 << ",\"status\":\"" << (row[3] ? row[3] : "") << "\""
-                 << ",\"total_time\":" << (row[4] ? row[4] : "0")
-                 << ",\"total_memory\":" << (row[5] ? row[5] : "0")
-                 << ",\"created_at\":\"" << (row[6] ? row[6] : "") << "\""
+                 << ",\"difficulty\":\"" << (row[3] ? row[3] : "简单") << "\""
+                 << ",\"status\":\"" << (row[4] ? row[4] : "") << "\""
+                 << ",\"total_time\":" << (row[5] ? row[5] : "0")
+                 << ",\"total_memory\":" << (row[6] ? row[6] : "0")
+                 << ",\"created_at\":\"" << (row[7] ? row[7] : "") << "\""
                  << "}";
         }
         json << "]";
         mysql_free_result(result);
+        res.set_content(json.str(), "application/json");
+    });
+
+    svr.Get("/api/user/problem-status", [](const httplib::Request& req, httplib::Response& res) {
+        AuthUser user = authenticate(req);
+        if (!user.valid) {
+            res.status = 401;
+            res.set_content("{\"error\":\"未登录\"}", "application/json");
+            return;
+        }
+
+        auto db = g_db->acquire();
+        db->query(
+            "SELECT q.id, q.title, q.difficulty, "
+            "EXISTS(SELECT 1 FROM submissions s2 WHERE s2.question_id=q.id AND s2.user_id=" + std::to_string(user.id) + " AND s2.status='AC') AS solved, "
+            "COUNT(s.id) AS attempt_count "
+            "FROM questions q "
+            "JOIN submissions s ON q.id = s.question_id AND s.user_id=" + std::to_string(user.id) + " "
+            "GROUP BY q.id "
+            "ORDER BY solved DESC, q.id ASC"
+        );
+
+        MYSQL_RES* result = db->store_result();
+        std::ostringstream json;
+        json << "[";
+        bool first = true;
+        MYSQL_ROW row;
+        while (result && (row = mysql_fetch_row(result))) {
+            if (!first) json << ",";
+            first = false;
+            json << "{\"id\":" << (row[0] ? row[0] : "0")
+                 << ",\"title\":\"" << json_escape(row[1] ? row[1] : "") << "\""
+                 << ",\"difficulty\":\"" << (row[2] ? row[2] : "简单") << "\""
+                 << ",\"solved\":" << (row[3] && std::string(row[3]) == "1" ? "true" : "false")
+                 << ",\"attempt_count\":" << (row[4] ? row[4] : "0")
+                 << "}";
+        }
+        json << "]";
+        if (result) mysql_free_result(result);
         res.set_content(json.str(), "application/json");
     });
 }

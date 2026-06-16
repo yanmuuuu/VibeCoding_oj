@@ -25,6 +25,7 @@ CREATE TABLE questions (
     output_format   TEXT,
     sample_input    TEXT,
     sample_output   TEXT,
+    difficulty      ENUM('简单','中等','困难') NOT NULL DEFAULT '简单',
     time_limit      INT          NOT NULL DEFAULT 1,
     memory_limit    INT          NOT NULL DEFAULT 256,
     is_visible      TINYINT(1)   NOT NULL DEFAULT 1,
