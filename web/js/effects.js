@@ -239,7 +239,29 @@
         });
     };
 
+    window.uploadAvatarFile = function(file) {
+        var formData = new FormData();
+        formData.append('avatar', file);
+        return API.uploadAvatar(formData).then(function(data) {
+            if (App.user) App.user.avatar_url = data.url;
+            App.updateNavAvatar();
+            if (typeof window.refreshUserCenterAvatar === 'function') {
+                window.refreshUserCenterAvatar();
+            }
+            return data;
+        });
+    };
+
     window.showCropModal = function(file) {
+        return window.showCropModalWithRatio(file, window.innerWidth / window.innerHeight);
+    };
+
+    window.showAvatarCropModal = function(file) {
+        return window.showCropModalWithRatio(file, 1, true);
+    };
+
+    window.showCropModalWithRatio = function(file, viewportRatio, circular) {
+        circular = circular || false;
         return new Promise(function(resolve, reject) {
             var modal = document.getElementById('crop-modal');
             var canvas = document.getElementById('crop-canvas');
@@ -250,7 +272,6 @@
 
             var img = new Image();
             var imgLoaded = false;
-            var viewportRatio = window.innerWidth / window.innerHeight;
             var crop = { x: 0, y: 0, w: 0, h: 0 };
 
             var dragging = false;
@@ -274,40 +295,78 @@
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-                // dark overlay with crop hole
                 var cx = crop.x, cy = crop.y, cw = crop.w, ch = crop.h;
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-                // top
-                ctx.fillRect(0, 0, canvas.width, cy);
-                // bottom
-                ctx.fillRect(0, cy + ch, canvas.width, canvas.height - cy - ch);
-                // left
-                ctx.fillRect(0, cy, cx, ch);
-                // right
-                ctx.fillRect(cx + cw, cy, canvas.width - cx - cw, ch);
 
-                // border
-                ctx.strokeStyle = '#fdbb2d';
-                ctx.lineWidth = 2.5;
-                ctx.strokeRect(cx, cy, cw, ch);
+                if (circular) {
+                    var cr = Math.min(cw, ch) / 2;
+                    var centerX = cx + cw / 2;
+                    var centerY = cy + ch / 2;
 
-                // corner handles
-                var handleSize = 10;
-                ctx.fillStyle = '#fdbb2d';
-                var corners = [
-                    { x: cx, y: cy },
-                    { x: cx + cw, y: cy },
-                    { x: cx, y: cy + ch },
-                    { x: cx + cw, y: cy + ch }
-                ];
-                corners.forEach(function(p) {
-                    ctx.fillRect(p.x - handleSize/2, p.y - handleSize/2, handleSize, handleSize);
-                });
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(0, 0, canvas.width, canvas.height);
+                    ctx.arc(centerX, centerY, cr, 0, Math.PI * 2, true);
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+                    ctx.fill();
+                    ctx.restore();
+
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, cr, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#fdbb2d';
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+
+                    var handleSize = 10;
+                    ctx.fillStyle = '#fdbb2d';
+                    var handles = [
+                        { x: centerX, y: centerY - cr },
+                        { x: centerX, y: centerY + cr },
+                        { x: centerX - cr, y: centerY },
+                        { x: centerX + cr, y: centerY }
+                    ];
+                    handles.forEach(function(p) {
+                        ctx.fillRect(p.x - handleSize/2, p.y - handleSize/2, handleSize, handleSize);
+                    });
+                } else {
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+                    ctx.fillRect(0, 0, canvas.width, cy);
+                    ctx.fillRect(0, cy + ch, canvas.width, canvas.height - cy - ch);
+                    ctx.fillRect(0, cy, cx, ch);
+                    ctx.fillRect(cx + cw, cy, canvas.width - cx - cw, ch);
+
+                    ctx.strokeStyle = '#fdbb2d';
+                    ctx.lineWidth = 2.5;
+                    ctx.strokeRect(cx, cy, cw, ch);
+
+                    var handleSize = 10;
+                    ctx.fillStyle = '#fdbb2d';
+                    var corners = [
+                        { x: cx, y: cy },
+                        { x: cx + cw, y: cy },
+                        { x: cx, y: cy + ch },
+                        { x: cx + cw, y: cy + ch }
+                    ];
+                    corners.forEach(function(p) {
+                        ctx.fillRect(p.x - handleSize/2, p.y - handleSize/2, handleSize, handleSize);
+                    });
+                }
             }
 
             function getHandleAt(mx, my) {
                 var cx = crop.x, cy = crop.y, cw = crop.w, ch = crop.h;
                 var r = 10;
+                if (circular) {
+                    var centerX = cx + cw / 2;
+                    var centerY = cy + ch / 2;
+                    var cr = Math.min(cw, ch) / 2;
+                    if (Math.abs(mx - centerX) < r && Math.abs(my - (centerY - cr)) < r) return 't';
+                    if (Math.abs(mx - centerX) < r && Math.abs(my - (centerY + cr)) < r) return 'b';
+                    if (Math.abs(my - centerY) < r && Math.abs(mx - (centerX - cr)) < r) return 'l';
+                    if (Math.abs(my - centerY) < r && Math.abs(mx - (centerX + cr)) < r) return 'r';
+                    var dist = Math.sqrt((mx - centerX) * (mx - centerX) + (my - centerY) * (my - centerY));
+                    if (dist <= cr) return 'move';
+                    return '';
+                }
                 if (Math.abs(mx - cx) < r && Math.abs(my - cy) < r) return 'tl';
                 if (Math.abs(mx - (cx + cw)) < r && Math.abs(my - cy) < r) return 'tr';
                 if (Math.abs(mx - cx) < r && Math.abs(my - (cy + ch)) < r) return 'bl';
@@ -484,16 +543,16 @@
 
             function initCrop() {
                 var ratio = viewportRatio;
-                var iw = img.width, ih = img.height;
-                if (iw / ih > ratio) {
-                    crop.h = ih;
-                    crop.w = ih * ratio;
+                var cw = canvas.width, ch = canvas.height;
+                if (cw / ch > ratio) {
+                    crop.h = ch;
+                    crop.w = ch * ratio;
                 } else {
-                    crop.w = iw;
-                    crop.h = iw / ratio;
+                    crop.w = cw;
+                    crop.h = cw / ratio;
                 }
-                crop.x = (iw - crop.w) / 2;
-                crop.y = (ih - crop.h) / 2;
+                crop.x = (cw - crop.w) / 2;
+                crop.y = (ch - crop.h) / 2;
             }
 
             function fitCanvas() {

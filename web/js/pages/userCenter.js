@@ -4,7 +4,13 @@ async function renderUserCenter(main) {
         <a href="#/problems" class="back-link">← 返回题目列表</a>
         <h2>用户中心</h2>
         <div class="user-info">
-            <p>用户名: <strong>${escapeHtml(App.user.username)}</strong></p>
+            <div class="user-avatar-wrap">
+                <img class="user-avatar-large" id="user-avatar-img" src="${App.user.avatar_url || ''}" alt="" title="点击上传头像">
+                <div>
+                    <p>用户名: <strong>${escapeHtml(App.user.username)}</strong></p>
+                </div>
+            </div>
+            <input type="file" id="user-avatar-upload-input" accept="image/*" style="display:none;">
         </div>
         <h3>问题状态</h3>
         <div id="submission-stats" style="margin-bottom:16px;font-size:0.9em;color:#666;"></div>
@@ -134,4 +140,36 @@ async function renderUserCenter(main) {
             $('#toggle-history-btn').textContent = '查看提交历史';
         }
     });
+
+    var avatarImg = document.getElementById('user-avatar-img');
+    var avatarInput = document.getElementById('user-avatar-upload-input');
+    if (avatarImg && avatarInput) {
+        avatarImg.addEventListener('click', function() {
+            avatarInput.click();
+        });
+        avatarInput.addEventListener('change', function() {
+            if (avatarInput.files && avatarInput.files[0]) {
+                var file = avatarInput.files[0];
+                avatarInput.value = '';
+                if (typeof window.showAvatarCropModal === 'function' && typeof window.uploadAvatarFile === 'function') {
+                    window.showAvatarCropModal(file).then(function(croppedFile) {
+                        return window.uploadAvatarFile(croppedFile).then(function() {
+                            avatarImg.src = App.user.avatar_url || '';
+                        });
+                    }).catch(function(e) {
+                        if (e.message !== '用户取消') {
+                            showToast('操作失败: ' + e.message, 'error');
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    window.refreshUserCenterAvatar = function() {
+        var img = document.getElementById('user-avatar-img');
+        if (img && App.user) {
+            img.src = App.user.avatar_url || '';
+        }
+    };
 }

@@ -20,6 +20,7 @@
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ace.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ext-language_tools.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
     <script>
         ace.config.set('basePath', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/');
     </script>
@@ -49,11 +50,13 @@
             <nav id="nav-links">
                 <a href="#/problems" id="nav-problems">题目</a>
                 <a href="#/announcements" id="nav-announcements">公告</a>
+                <a href="#/discussions" id="nav-discussions">讨论</a>
                 <a href="#/user" id="nav-user">我的</a>
                 <a href="#/admin" id="nav-admin" style="display:none;">管理</a>
                 <a href="#/login" id="nav-login" style="display:none;">登录</a>
                 <a href="#" id="nav-logout">退出</a>
             </nav>
+            <img id="nav-avatar" src="" alt="" class="nav-avatar" style="display:none;" title="查看个人中心">
             <button class="nav-settings-btn" id="nav-settings-btn" title="设置">⚙</button>
         </header>
         <div id="crop-modal" style="display:none;">
@@ -90,6 +93,15 @@
                 <button id="upload-bg-btn" class="btn-upload-bg">选择图片</button>
                 <input type="file" id="upload-bg-input" accept="image/*" style="display:none;">
             </div>
+            <div class="setting-row setting-row-avatar" id="setting-avatar-row">
+                <label>上传头像</label>
+                <button id="upload-avatar-btn" class="btn-upload-bg">选择图片</button>
+                <input type="file" id="upload-avatar-input" accept="image/*" style="display:none;">
+            </div>
+            <div class="setting-row" id="setting-reset-avatar" style="display:none;">
+                <label></label>
+                <button id="reset-avatar-btn" class="btn-reset-bg">恢复默认头像</button>
+            </div>
             <div class="setting-row setting-row-slider">
                 <label>背景虚化 <span id="blur-value-label">0px</span></label>
                 <input type="range" id="blur-slider" min="0" max="30" value="0">
@@ -123,6 +135,9 @@
     <script src="/js/pages/adminUsers.js"></script>
     <script src="/js/pages/adminAnnouncements.js"></script>
     <script src="/js/pages/announcements.js"></script>
+    <script src="/js/pages/discussions.js"></script>
+    <script src="/js/pages/discussionDetail.js"></script>
+    <script src="/js/pages/problemComments.js"></script>
     <script src="/js/effects.js"></script>
 </body>
 </html>

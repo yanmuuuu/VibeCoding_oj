@@ -13,20 +13,27 @@ void register_user_routes(httplib::Server& svr) {
             return;
         }
         std::string bg_url = "null";
+        std::string av_url = "null";
         auto db = g_db->acquire();
-        db->query("SELECT background_url FROM users WHERE id=" + std::to_string(user.id));
+        db->query("SELECT background_url, avatar_url FROM users WHERE id=" + std::to_string(user.id));
         MYSQL_RES* result = db->store_result();
         if (result) {
             MYSQL_ROW row = mysql_fetch_row(result);
-            if (row && row[0]) {
-                bg_url = "\"" + json_escape(row[0]) + "\"";
+            if (row) {
+                if (row[0]) {
+                    bg_url = "\"" + json_escape(row[0]) + "\"";
+                }
+                if (row[1]) {
+                    av_url = "\"" + json_escape(row[1]) + "\"";
+                }
             }
             mysql_free_result(result);
         }
         res.set_content("{\"id\":" + std::to_string(user.id) +
                         ",\"username\":\"" + json_escape(user.username) + "\"" +
                         ",\"is_admin\":" + (user.is_admin ? "true" : "false") +
-                        ",\"background_url\":" + bg_url + "}",
+                        ",\"background_url\":" + bg_url +
+                        ",\"avatar_url\":" + av_url + "}",
                         "application/json");
     });
 

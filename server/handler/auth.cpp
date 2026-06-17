@@ -4,6 +4,35 @@
 #include "../util/crypto.hpp"
 #include "../util/json_extract.hpp"
 #include <string>
+#include <vector>
+#include <filesystem>
+#include <cstdlib>
+#include <ctime>
+
+namespace fs = std::filesystem;
+
+static std::string pick_random_default_avatar() {
+    std::string avatar_dir = "web/avatars";
+    std::vector<std::string> defaults;
+    try {
+        if (fs::exists(avatar_dir) && fs::is_directory(avatar_dir)) {
+            for (const auto& entry : fs::directory_iterator(avatar_dir)) {
+                if (entry.is_regular_file()) {
+                    std::string fname = entry.path().filename().string();
+                    if (fname.size() >= 3 && fname.substr(0, 2) == "at" && fname.find("user_") == std::string::npos) {
+                        std::string ext = entry.path().extension().string();
+                        if (ext == ".webp" || ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".svg") {
+                            defaults.push_back("/avatars/" + fname);
+                        }
+                    }
+                }
+            }
+        }
+    } catch (...) {}
+    if (defaults.empty()) return "/avatars/at1.webp";
+    int idx = rand() % defaults.size();
+    return defaults[idx];
+}
 
 void register_auth_routes(httplib::Server& svr) {
     svr.Post("/api/register", [](const httplib::Request& req, httplib::Response& res) {
@@ -56,10 +85,12 @@ void register_auth_routes(httplib::Server& svr) {
                 return;
             }
 
+            std::string avatar = pick_random_default_avatar();
             std::string escaped_hash = db->escape(hash);
+            std::string escaped_avatar = db->escape(avatar);
             try {
-                db->query("INSERT INTO users (username, password_hash) VALUES ('" +
-                          escaped_user + "', '" + escaped_hash + "')");
+                db->query("INSERT INTO users (username, password_hash, avatar_url) VALUES ('" +
+                          escaped_user + "', '" + escaped_hash + "', '" + escaped_avatar + "')");
             } catch (const std::exception& e) {
                 std::string err = e.what();
                 if (err.find("Duplicate") != std::string::npos ||

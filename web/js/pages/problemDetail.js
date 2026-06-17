@@ -25,6 +25,11 @@ async function renderProblemDetail(main) {
             </div>
             <div class="problem-layout" id="problem-layout">
                 <div class="problem-left" id="problem-left">
+                    <div class="problem-tabs" id="problem-tabs">
+                        <button class="problem-tab active" data-tab="desc">题目描述</button>
+                        <button class="problem-tab" data-tab="comments">讨论</button>
+                    </div>
+                    <div id="problem-desc-tab" class="problem-tab-content">
                     <div class="section">
                         <h3>题目描述</h3>
                         <div>${escapeHtml(p.description).replace(/\\n/g, '<br>')}</div>
@@ -40,6 +45,8 @@ async function renderProblemDetail(main) {
                         <span class="limit-badge">${p.time_limit}s</span>
                         <span class="limit-badge">${p.memory_limit}MB</span>
                     </div>
+                    </div>
+                    <div id="problem-comments-tab" class="problem-tab-content" data-comments-tab style="display:none;"></div>
                 </div>
                 <div class="layout-resizer" id="layout-resizer" title="拖动调节左右宽度"></div>
                 <div class="problem-right" id="problem-right">
@@ -86,6 +93,22 @@ int main() {
                 </div>
             </div>
         </div>`;
+
+    var commentsTabInited = false;
+    $('#problem-tabs').addEventListener('click', function(e) {
+        if (!e.target.classList.contains('problem-tab')) return;
+        var tab = e.target.dataset.tab;
+        $('#problem-tabs').querySelectorAll('.problem-tab').forEach(function(t) { t.classList.toggle('active', t === e.target); });
+        $('#problem-desc-tab').style.display = tab === 'desc' ? '' : 'none';
+        $('#problem-comments-tab').style.display = tab === 'comments' ? '' : 'none';
+        if (tab === 'comments' && !commentsTabInited) {
+            commentsTabInited = true;
+            initProblemCommentsTab(document.getElementById('problem-comments-tab'), parseInt(id, 10));
+        }
+        if (tab === 'comments') {
+            setTimeout(function() { if (window._aceEditor) window._aceEditor.resize(); }, 50);
+        }
+    });
 
     const layout = $('#problem-layout');
     const leftPanel = $('#problem-left');

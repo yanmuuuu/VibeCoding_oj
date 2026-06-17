@@ -13,9 +13,30 @@ const App = {
             this.user = null;
         }
         this.updateNav();
+        this.updateNavAvatar();
         this.highlightNav(window.location.hash.slice(1) || '/');
         if (typeof window.refreshBackground === 'function') {
             window.refreshBackground();
+        }
+    },
+    updateNavAvatar() {
+        var av = document.getElementById('nav-avatar');
+        if (!av) return;
+        if (this.user && this.user.avatar_url) {
+            av.src = this.user.avatar_url;
+            av.style.display = '';
+        } else {
+            av.style.display = 'none';
+        }
+        this.updateResetAvatarBtn();
+    },
+    updateResetAvatarBtn() {
+        var row = document.getElementById('setting-reset-avatar');
+        if (!row) return;
+        if (this.user && this.user.avatar_url && this.user.avatar_url.indexOf('/avatars/user_') === 0) {
+            row.style.display = 'flex';
+        } else {
+            row.style.display = 'none';
         }
     },
     updateNav() {
@@ -23,6 +44,7 @@ const App = {
         const navLinks = $('#nav-links');
         const navProblems = $('#nav-problems');
         const navAnnounce = $('#nav-announcements');
+        const navDiscussions = $('#nav-discussions');
         const navAdmin = $('#nav-admin');
         const navUser = $('#nav-user');
         const navLogin = $('#nav-login');
@@ -34,12 +56,14 @@ const App = {
 
         if (this.user) {
             if (navProblems) navProblems.style.display = '';
+            if (navDiscussions) navDiscussions.style.display = '';
             if (navAdmin) navAdmin.style.display = this.user.is_admin ? '' : 'none';
             if (navUser) navUser.style.display = this.user.is_admin ? 'none' : '';
             if (navLogin) navLogin.style.display = 'none';
             if (navLogout) navLogout.style.display = '';
         } else {
             if (navProblems) navProblems.style.display = 'none';
+            if (navDiscussions) navDiscussions.style.display = 'none';
             if (navAdmin) navAdmin.style.display = 'none';
             if (navUser) navUser.style.display = 'none';
             if (navLogin) navLogin.style.display = '';
@@ -50,10 +74,11 @@ const App = {
         var activeId = null;
         if (hash === '/problems' || hash.indexOf('/problems/') === 0) activeId = 'nav-problems';
         else if (hash === '/announcements') activeId = 'nav-announcements';
+        else if (hash === '/discussions' || hash.indexOf('/discussions/') === 0) activeId = 'nav-discussions';
         else if (hash === '/user') activeId = 'nav-user';
         else if (hash.indexOf('/admin') === 0) activeId = 'nav-admin';
         else if (hash === '/login' || hash === '/register') activeId = 'nav-login';
-        ['nav-problems', 'nav-announcements', 'nav-user', 'nav-admin', 'nav-login'].forEach(function(id) {
+        ['nav-problems', 'nav-announcements', 'nav-discussions', 'nav-user', 'nav-admin', 'nav-login'].forEach(function(id) {
             var el = document.getElementById(id);
             if (el) el.classList.toggle('nav-active', id === activeId);
         });
@@ -94,6 +119,7 @@ const App = {
             '/admin/users': 'admin',
             '/admin/announcements': 'admin',
             '/announcements': 'announcements',
+            '/discussions': 'discussions',
             '/404': 'notFound',
         };
 
@@ -107,6 +133,10 @@ const App = {
                 page = 'result';
                 const id = hash.split('/')[2];
                 main.dataset.submissionId = id;
+            } else if (hash.startsWith('/discussions/')) {
+                page = 'discussionDetail';
+                const id = hash.split('/')[2];
+                main.dataset.discussionId = id;
             } else if (hash.startsWith('/admin/questions/')) {
                 const parts = hash.split('/');
                 const id = parts[3];
@@ -136,6 +166,8 @@ const App = {
                 case 'admin': await renderAdmin(main); break;
                 case 'adminQuestionEdit': await renderAdminQuestionEdit(main); break;
                 case 'announcements': await renderAnnouncements(main); break;
+                case 'discussions': await renderDiscussions(main); break;
+                case 'discussionDetail': await renderDiscussionDetail(main); break;
                 default: renderNotFound(main); break;
             }
         } catch(e) {
@@ -157,6 +189,10 @@ document.addEventListener('click', async (e) => {
         App.user = null;
         App.updateNav();
         App.navigate('#/login');
+    }
+    if (e.target.id === 'nav-avatar') {
+        e.preventDefault();
+        App.navigate('#/user');
     }
 });
 
@@ -292,6 +328,59 @@ function initSettings() {
                         }
                     });
                 }
+            }
+        });
+    }
+
+    var uploadAvatarBtn = document.getElementById('upload-avatar-btn');
+    var uploadAvatarInput = document.getElementById('upload-avatar-input');
+    if (uploadAvatarBtn && uploadAvatarInput) {
+        uploadAvatarBtn.addEventListener('click', function() {
+            if (!App.user) { App.navigate('#/login'); return; }
+            uploadAvatarInput.click();
+        });
+        uploadAvatarInput.addEventListener('change', function() {
+            if (uploadAvatarInput.files && uploadAvatarInput.files[0]) {
+                var file = uploadAvatarInput.files[0];
+                uploadAvatarInput.value = '';
+                if (typeof window.showAvatarCropModal === 'function' && typeof window.uploadAvatarFile === 'function') {
+                    window.showAvatarCropModal(file).then(function(croppedFile) {
+                        var origText = uploadAvatarBtn.textContent;
+                        uploadAvatarBtn.textContent = '上传中...';
+                        uploadAvatarBtn.disabled = true;
+                        return window.uploadAvatarFile(croppedFile).then(function() {
+                            uploadAvatarBtn.textContent = origText;
+                            uploadAvatarBtn.disabled = false;
+                            showToast('头像上传成功', 'success');
+                        });
+                    }).catch(function(e) {
+                        if (e.message !== '用户取消') {
+                            showToast('操作失败: ' + e.message, 'error');
+                        }
+                        uploadAvatarBtn.textContent = '选择图片';
+                        uploadAvatarBtn.disabled = false;
+                    });
+                }
+            }
+        });
+    }
+
+    var resetAvatarBtn = document.getElementById('reset-avatar-btn');
+    if (resetAvatarBtn) {
+        resetAvatarBtn.addEventListener('click', async function() {
+            if (!confirm('确定要恢复默认头像吗？')) return;
+            try {
+                resetAvatarBtn.textContent = '...';
+                resetAvatarBtn.disabled = true;
+                var data = await API.deleteAvatar();
+                if (App.user) App.user.avatar_url = data.url;
+                App.updateNavAvatar();
+                showToast('已恢复默认头像', 'success');
+            } catch (e) {
+                showToast('恢复失败: ' + e.message, 'error');
+            } finally {
+                resetAvatarBtn.textContent = '恢复默认头像';
+                resetAvatarBtn.disabled = false;
             }
         });
     }

@@ -7,6 +7,7 @@ CREATE TABLE users (
     password_hash   VARCHAR(256) NOT NULL,
     is_admin        TINYINT(1)   NOT NULL DEFAULT 0,
     background_url  VARCHAR(512) DEFAULT NULL,
+    avatar_url      VARCHAR(512) DEFAULT NULL,
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -67,4 +68,70 @@ CREATE TABLE announcements (
     is_pinned       TINYINT(1)   NOT NULL DEFAULT 0,
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE discussions (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    user_id     INT      NOT NULL,
+    content     TEXT     NOT NULL,
+    like_count  INT      NOT NULL DEFAULT 0,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE discussion_replies (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    discussion_id   INT      NOT NULL,
+    user_id         INT      NOT NULL,
+    parent_reply_id INT      DEFAULT NULL,
+    content         TEXT     NOT NULL,
+    like_count      INT      NOT NULL DEFAULT 0,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (discussion_id)  REFERENCES discussions(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id)        REFERENCES users(id)       ON DELETE CASCADE,
+    FOREIGN KEY (parent_reply_id) REFERENCES discussion_replies(id) ON DELETE CASCADE
+);
+
+CREATE TABLE discussion_likes (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    user_id     INT          NOT NULL,
+    target_type ENUM('discussion','reply') NOT NULL,
+    target_id   INT          NOT NULL,
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_dlike_user_target (user_id, target_type, target_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE problem_comments (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    question_id INT      NOT NULL,
+    user_id     INT      NOT NULL,
+    content     TEXT     NOT NULL,
+    like_count  INT      NOT NULL DEFAULT 0,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id)     REFERENCES users(id)     ON DELETE CASCADE
+);
+
+CREATE TABLE comment_replies (
+    id               INT AUTO_INCREMENT PRIMARY KEY,
+    comment_id       INT      NOT NULL,
+    user_id          INT      NOT NULL,
+    parent_reply_id  INT      DEFAULT NULL,
+    content          TEXT     NOT NULL,
+    like_count       INT      NOT NULL DEFAULT 0,
+    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (comment_id)       REFERENCES problem_comments(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id)          REFERENCES users(id)            ON DELETE CASCADE,
+    FOREIGN KEY (parent_reply_id)  REFERENCES comment_replies(id)  ON DELETE CASCADE
+);
+
+CREATE TABLE comment_likes (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    user_id     INT          NOT NULL,
+    target_type ENUM('comment','reply') NOT NULL,
+    target_id   INT          NOT NULL,
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_clike_user_target (user_id, target_type, target_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

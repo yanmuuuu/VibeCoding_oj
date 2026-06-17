@@ -51,9 +51,9 @@
 - **测试用例管理**：增删改查，支持行内编辑（input/expected_output/order_index）
 - **用户管理**：用户列表（分页+搜索）、删除用户、提升/取消管理员权限
 - **系统公告**：管理员可发布/编辑/删除公告，全站可见（`#/announcements` 公共页面）
-- **管理员导航栏**：隐藏「我的」链接，显示：题目 | 公告 | 管理 | 退出
-- **普通用户导航栏**：题目 | 公告 | 我的 | 退出
-- **未登录导航栏**：公告 | 登录（公告为公开页）
+- **管理员导航栏**：隐藏「我的」链接，显示：题目 | 公告 | 讨论 | 管理 | 退出
+- **普通用户导航栏**：题目 | 公告 | 讨论 | 我的 | 退出
+- **未登录导航栏**：公告 | 讨论 | 登录（公告和讨论为公开页）
 - 管理页需要管理员权限
 
 ### 2.6 通用
@@ -62,6 +62,20 @@
 - 服务端 HTTP 异常处理：`set_error_handler` 返回 JSON 格式错误（对 API 消费者友好）；SPA Hash Router 渲染 `#/404` 和 `#/500` 客户端 HTML 错误页
 - 后端错误信息中文化（大部分 API 响应 message 已中文化，少数边缘路径保留英文）
 - 登录页仅提示"用户名或密码错误"，不区分具体原因（防枚举攻击）
+
+### 2.7 讨论系统
+- **大讨论区**：全局讨论版块，用户可发帖（纯正文、无标题）、回复（二级嵌套）、点赞
+  - 列表页卡片式展示（头像+用户名+正文前100字+时间+点赞数），按发布时间倒序，每页 20 条
+  - 正文支持 **Markdown 渲染**（marked.js CDN），可嵌入代码块
+  - 回复支持二级嵌套：直接回复帖子（一级）+ 回复别人的回复（二级）
+  - 点赞：每人每帖/每条回复限点一次（独立 `likes` 表 + UNIQUE 约束）
+  - 权限：登录用户可发帖/回复/删自己的；管理员可删任意
+  - 导航栏入口：「讨论」链接 → `#/discussions`
+- **题目评论区**：每道题目独立讨论区，题目详情页「讨论」Tab（与「题目描述」切换）；交互与大讨论一致：卡片列表预览 → 点击进入帖子详情 → 「发帖」发表主帖 → 「回复楼主」/楼中楼回复
+  - 功能与大讨论一致（Markdown、二级嵌套、点赞、权限）
+  - 数据库表分开：`problem_comments` + `comment_replies` + `comment_likes`
+  - API 路由前缀 `/api/problems/:id/comments`
+  - 排序：按发布时间倒序（最新在前）
 
 ---
 
@@ -94,6 +108,8 @@
 │  │                │  │  /api/submit              │ │
 │  │                │  │  /api/result/:id          │ │
 │  │                │  │  /api/admin/*             │ │
+│  │                │  │  /api/discussions/*       │ │
+│  │                │  │  /api/.../comments/*      │ │
 │  └───────────────┘  └───────────┬──────────────┘ │
 │                                  │                │
 │  ┌───────────────────────────────▼─────────────┐ │
@@ -113,12 +129,14 @@
                        ▼
               ┌────────────────┐
               │     MySQL       │
-              │  - users        │
-              │  - sessions     │
-              │  - questions    │
-              │  - test_cases   │
-              │  - submissions  │
-              └────────────────┘
+               │  - users        │
+               │  - sessions     │
+               │  - questions    │
+               │  - test_cases   │
+               │  - submissions  │
+               │  - discussions  │
+               │  - comments     │
+               └────────────────┘
 ```
 
 ---
@@ -133,6 +151,7 @@ CREATE TABLE users (
     password_hash   VARCHAR(256) NOT NULL,          -- Argon2id
     is_admin        TINYINT(1)   NOT NULL DEFAULT 0,
     background_url  VARCHAR(512) DEFAULT NULL,       -- 用户自定义背景图路径，NULL=使用系统相册随机图
+    avatar_url      VARCHAR(512) DEFAULT NULL,       -- 用户头像路径，注册时随机分配系统默认头像
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -211,6 +230,90 @@ CREATE TABLE announcements (
 );
 ```
 
+### 5.7 discussions — 大讨论帖子
+```sql
+CREATE TABLE discussions (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    user_id     INT      NOT NULL,
+    content     TEXT     NOT NULL,        -- Markdown 正文
+    like_count  INT      NOT NULL DEFAULT 0,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+```
+
+### 5.8 discussion_replies — 大讨论回复（二级嵌套）
+```sql
+CREATE TABLE discussion_replies (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    discussion_id   INT      NOT NULL,
+    user_id         INT      NOT NULL,
+    parent_reply_id INT      DEFAULT NULL,  -- NULL=直接回复帖子，非NULL=回复某条回复（仅一级）
+    content         TEXT     NOT NULL,
+    like_count      INT      NOT NULL DEFAULT 0,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (discussion_id)  REFERENCES discussions(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id)        REFERENCES users(id)       ON DELETE CASCADE,
+    FOREIGN KEY (parent_reply_id) REFERENCES discussion_replies(id) ON DELETE CASCADE
+);
+```
+
+### 5.9 discussion_likes — 大讨论点赞
+```sql
+CREATE TABLE discussion_likes (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    user_id     INT          NOT NULL,
+    target_type ENUM('discussion','reply') NOT NULL,  -- 点赞目标类型
+    target_id   INT          NOT NULL,                -- 点赞目标 ID
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_target (user_id, target_type, target_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+```
+
+### 5.10 problem_comments — 题目评论
+```sql
+CREATE TABLE problem_comments (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    question_id INT      NOT NULL,
+    user_id     INT      NOT NULL,
+    content     TEXT     NOT NULL,
+    like_count  INT      NOT NULL DEFAULT 0,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id)     REFERENCES users(id)     ON DELETE CASCADE
+);
+```
+
+### 5.11 comment_replies — 题目评论回复（二级嵌套）
+```sql
+CREATE TABLE comment_replies (
+    id               INT AUTO_INCREMENT PRIMARY KEY,
+    comment_id       INT      NOT NULL,
+    user_id          INT      NOT NULL,
+    parent_reply_id  INT      DEFAULT NULL,
+    content          TEXT     NOT NULL,
+    like_count       INT      NOT NULL DEFAULT 0,
+    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (comment_id)       REFERENCES problem_comments(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id)          REFERENCES users(id)            ON DELETE CASCADE,
+    FOREIGN KEY (parent_reply_id)  REFERENCES comment_replies(id)  ON DELETE CASCADE
+);
+```
+
+### 5.12 comment_likes — 题目评论点赞
+```sql
+CREATE TABLE comment_likes (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    user_id     INT          NOT NULL,
+    target_type ENUM('comment','reply') NOT NULL,
+    target_id   INT          NOT NULL,
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_target (user_id, target_type, target_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+```
+
 ---
 
 ## 6. API 接口清单
@@ -243,9 +346,11 @@ CREATE TABLE announcements (
 |---|---|---|---|
 | GET | `/api/user/submissions` | 我的提交历史（分页） | 需要 |
 | GET | `/api/user/problem-status` | 每题汇总提交状态（id, title, difficulty, solved, attempt_count） | 需要 |
-| GET | `/api/user/profile` | 当前用户信息 | 需要 |
+| GET | `/api/user/profile` | 当前用户信息（含 avatar_url） | 需要 |
 | GET | `/api/user/ac-code/:question_id` | 获取用户在某题下最新 AC 提交的代码（返回 {found, code}） | 需要 |
 | GET | `/api/user/ac-codes/:question_id` | 获取用户在某题下所有 AC 提交的代码列表（返回 [{id, code, total_time, total_memory, created_at}]，按提交时间倒序） | 需要 |
+| POST | `/api/user/avatar/upload` | 上传自定义头像（multipart form，field: avatar），裁剪后提交（1:1 正方形） | 需要 |
+| DELETE | `/api/user/avatar` | 删除自定义头像 → 重新随机分配一个系统默认头像 | 需要 |
 
 ### 6.5 背景管理
 
@@ -284,6 +389,35 @@ CREATE TABLE announcements (
 | 方法 | 路径 | 说明 | 鉴权 |
 |---|---|---|---|
 | GET | `/api/announcements` | 获取所有公告（按置顶+创建时间排序） | 无 |
+
+### 6.8 大讨论
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|---|---|---|---|
+| GET | `/api/discussions?page=&page_size=` | 帖子列表（含用户名、头像、回复数、当前用户点赞状态） | 需要 |
+| POST | `/api/discussions` | 发帖 `{content}` | 需要 |
+| GET | `/api/discussions/:id` | 帖子详情 + 回复列表（二级嵌套，含用户信息、点赞状态） | 需要 |
+| DELETE | `/api/discussions/:id` | 删帖（本人或 admin） | 需要 |
+| POST | `/api/discussions/:id/like` | 点赞帖子（幂等） | 需要 |
+| DELETE | `/api/discussions/:id/like` | 取消点赞 | 需要 |
+| POST | `/api/discussions/:id/replies` | 回复帖子 `{content, parent_reply_id?}` | 需要 |
+| DELETE | `/api/discussions/:id/replies/:rid` | 删回复（本人或 admin） | 需要 |
+| POST | `/api/discussions/:id/replies/:rid/like` | 点赞回复 | 需要 |
+| DELETE | `/api/discussions/:id/replies/:rid/like` | 取消点赞 | 需要 |
+
+### 6.9 题目评论区
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|---|---|---|---|
+| GET | `/api/problems/:id/comments?page=&page_size=` | 评论列表（二级嵌套回复，含用户信息、点赞状态） | 需要 |
+| POST | `/api/problems/:id/comments` | 发表评论 `{content}` | 需要 |
+| POST | `/api/problems/:id/comments/:cid/replies` | 回复评论 `{content, parent_reply_id?}` | 需要 |
+| DELETE | `/api/problems/:id/comments/:cid` | 删评论（本人或 admin） | 需要 |
+| DELETE | `/api/problems/:id/comments/:cid/replies/:rid` | 删回复 | 需要 |
+| POST | `/api/problems/:id/comments/:cid/like` | 点赞评论 | 需要 |
+| DELETE | `/api/problems/:id/comments/:cid/like` | 取消点赞 | 需要 |
+| POST | `/api/problems/:id/comments/:cid/replies/:rid/like` | 点赞回复 | 需要 |
+| DELETE | `/api/problems/:id/comments/:cid/replies/:rid/like` | 取消点赞 | 需要 |
 
 ---
 
@@ -380,6 +514,8 @@ CREATE TABLE announcements (
 | `#/admin/questions/:id` | 管理员 → 编辑题目 | 编辑题目 + 测试用例管理 + 标程自动生成 |
 | `#/admin/users` | 管理员 → 用户管理 | 分页+搜索+权限切换+删除 |
 | `#/admin/announcements` | 管理员 → 公告管理 | 发布/编辑/删除公告 |
+| `#/discussions` | 大讨论列表页 | 卡片式信息流，20条/页，需要登录 |
+| `#/discussions/:id` | 帖子详情页 | Markdown 正文渲染 + 回复列表（二级嵌套）+ 点赞 |
 | `#/404` | 404 页面 | 路由未匹配 |
 | `#/500` | 500 页面 | 服务器异常 |
 
@@ -412,6 +548,10 @@ MioOJ/
 │   │   ├── user.cpp                  # 个人资料、提交历史（分页）
 │   │   ├── admin.cpp                 # 题目 CRUD + 测试用例 CRUD + 统计 + 批量操作 + 标程生成 + 用户管理（admin 鉴权）
 │   │   ├── announcement.cpp          # 公告 CRUD（管理员/公开）
+│   │   ├── background.cpp             # 背景图片管理：系统相册列表、上传、删除
+│   │   ├── avatar.cpp                 # 头像管理：默认头像随机分配、上传、删除
+│   │   ├── discussion.cpp              # 大讨论：帖子 CRUD + 回复 + 点赞（`handler/discussion.cpp`）
+│   │   ├── comment.cpp                 # 题目评论区：评论 CRUD + 回复 + 点赞（`handler/comment.cpp`）
 │   ├── judge/
 │   │   ├── engine.hpp/.cpp           # 判题引擎：接收任务 → 编译 → 遍历测试点 → 运行 → 写结果
 │   │   ├── compiler.hpp/.cpp         # 编译模块：临时文件 → g++ -O2 -std=c++17 → 超时 10s
@@ -426,6 +566,7 @@ MioOJ/
 │       └── tmpfile.hpp/.cpp          # 临时文件管理（mkstemps + RAII 自动清理）
 ├── web/                              # 前端静态文件（SPA）
 │   ├── backgrounds/                   # 背景相册目录（用户可放入图片，自动虚化作为随机背景）
+│   ├── avatars/                       # 头像目录：系统默认头像 (at*.webp) + 用户自定义头像 (user_*.*)
 │   ├── index.html                    # SPA 入口（ctemplate 渲染 → Hash Router 接管，含 ACE CDN 引入）
 │   ├── css/
 │   │   └── style.css                 # 全局样式（LeetCode 风格简约浅色主题）
@@ -446,7 +587,10 @@ MioOJ/
 │       │   ├── adminQuestionEdit.js  # 编辑题目 + 测试用例管理（行内编辑）+ 标程自动生成
 │       │   ├── adminUsers.js         # 用户管理（分页+搜索+权限切换+删除）
 │       │   ├── adminAnnouncements.js # 公告管理（发布+编辑+删除）
-│       │   └── announcements.js      # 公示公告展示页
+│       │   ├── announcements.js      # 公示公告展示页
+│       │   ├── discussions.js        # 大讨论列表页（卡片式信息流）
+│       │   ├── discussionDetail.js   # 帖子详情页（Markdown 渲染 + 二级回复 + 点赞）
+│       │   └── problemComments.js    # 题目讨论 Tab（复用回复/点赞组件）
 └── test/                             # 测试用例示例（预留）
     └── cases/
 ```
@@ -647,6 +791,54 @@ MioOJ/
 - 可折叠/展开
 
 > **用户中心统计**：统计信息来自 `/api/user/problem-status` 接口，统计已解决题数（有 AC 记录 = 已通过）和尝试题数（有提交记录 = 尝试过）。
+
+### 大讨论列表 `#/discussions`
+```
+┌──────────────────────────────────────────────────────┐
+│ 🐱 MioOJ   [题目] [公告] [讨论*] [我的] [退出]  ⚙     │
+├──────────────────────────────────────────────────────┤
+│  ← 返回题目列表              [发帖]                    │
+│                                                      │
+│  ┌─ 讨论帖 ─────────────────────────────────────────┐ │
+│  │ 🐱 用户名    2026-01-15 10:30                    │ │
+│  │ 这是帖子内容的前 100 字预览...                    │ │
+│  │ ♥ 12  |  💬 5 条回复                             │ │
+│  └──────────────────────────────────────────────────┘ │
+│                                                      │
+│  ┌─ 讨论帖 ─────────────────────────────────────────┐ │
+│  │ ...                                              │ │
+│  └──────────────────────────────────────────────────┘ │
+│                                                      │
+│  [加载更多]                                           │
+└──────────────────────────────────────────────────────┘
+```
+
+### 帖子详情 `#/discussions/1`
+```
+┌──────────────────────────────────────────────────────┐
+│  ← 返回讨论列表                                       │
+│                                                      │
+│  ┌─ 帖子 ───────────────────────────────────────────┐ │
+│  │ 🐱 用户名    2026-01-15 10:30                    │ │
+│  │                                                  │ │
+│  │ **Markdown** 渲染的正文内容...                     │ │
+│  │ ```cpp                                           │ │
+│  │ // 支持代码块语法高亮                               │ │
+│  │ ```                                              │ │
+│  │                                                  │ │
+│  │ [♥ 12 赞]  [回复楼主]  [删除]                      │ │
+│  └──────────────────────────────────────────────────┘ │
+│  （点击「回复楼主」后才出现行内回复框，进入详情页不自动展示） │
+│                                                      │
+│  ┌─ 5 条回复 ───────────────────────────────────────┐ │
+│  │ 🐱 用户A  回复内容...  ♥ 3  [回复] [删除]        │ │
+│  │   └ 🐱 用户B  @用户A 回复的回复  ♥ 1  [删除]    │ │  ← 二级嵌套
+│  │ 🐱 用户C  另一条回复...  ♥ 0  [回复] [删除]       │ │
+│  └──────────────────────────────────────────────────┘ │
+│                                                      │
+│  [加载更多回复]                                        │
+└──────────────────────────────────────────────────────┘
+```
 
 ### 后台管理 `#/admin`
 ```
@@ -879,7 +1071,36 @@ MioOJ/
 - [x] 公告页：置顶公告 `.announce-card-pinned` 金边高亮
 - [x] 设置面板开关：青蓝→浅粉长条 toggle + 点击流动拖尾（关闭态白色底）
 
----
+### Phase 23 — 用户头像系统 ✅
+- [x] 数据库 `users` 表新增 `avatar_url VARCHAR(512)` 字段
+- [x] 系统默认头像：`web/avatars/` 目录，6 个 WebP 头像（at1~at6.webp）
+- [x] 注册时随机分配系统默认头像路径写入 `users.avatar_url`
+- [x] 后端 `POST /api/user/avatar/upload`：上传自定义头像（multipart），保存为 `web/avatars/user_{id}.jpg`，更新 DB（`handler/avatar.cpp`）
+- [x] 后端 `DELETE /api/user/avatar`：删除自定义头像文件 → 重新随机分配系统默认头像（`handler/avatar.cpp`）
+- [x] `GET /api/user/profile` 返回 `avatar_url` 字段（`handler/user.cpp`）
+- [x] 前端导航栏显示圆形头像（`.nav-avatar`），点击跳转用户中心
+- [x] 设置面板新增「上传头像」按钮 + 「恢复默认头像」按钮
+- [x] 用户中心页显示大头像（`.user-avatar-large`），点击可上传
+- [x] 头像裁剪：`showCropModalWithRatio(file, 1, true)` — 1:1 正方形裁剪框 + 圆形遮罩视觉反馈，4 个方向拖拽手柄
+- [x] 前端 `api.js` 新增 `uploadAvatar()` / `deleteAvatar()` 方法
+- [x] `router.js` 新增 `updateNavAvatar()` / `updateResetAvatarBtn()` 方法，与 `loadUser` 联动
+- [x] 头像样式适配 LeetCode 白模式
+- [x] BUILD PASS：编译通过，0 error
+
+### Phase 24 — 讨论功能 ✅
+- [x] 数据库：新建 6 张表（discussions / discussion_replies / discussion_likes / problem_comments / comment_replies / comment_likes）
+- [x] 后端 `handler/discussion.cpp`：大讨论 10 个 API（帖子 CRUD + 回复 + 点赞 toggle/取消点赞）
+- [x] 后端 `handler/comment.cpp`：题目评论区 9 个 API（评论 CRUD + 回复 + 点赞 toggle/取消点赞）
+- [x] `main.cpp` 注册 `register_discussion_routes` + `register_comment_routes`
+- [x] 前端 `web/js/pages/discussions.js`：大讨论列表页（卡片式信息流，20条/页，发帖表单）
+- [x] 前端 `web/js/pages/discussionDetail.js`：帖子详情页（Markdown 渲染 + 二级嵌套回复 + 点赞；进入详情仅浏览，点击楼主帖「回复楼主」才出现行内回复框；楼中楼仍通过各条回复的「回复」触发）
+- [x] 前端 `web/js/pages/problemComments.js`：题目讨论 Tab（与大讨论一致：卡片列表 + 点击进入详情 + 发帖按钮 + Markdown + 二级回复 + 点赞 + 回复楼主；修复列表加载时清空发帖表单的 bug）
+- [x] 前端 `web/js/router.js`：新增 `#/discussions` + `#/discussions/:id` 路由 + `nav-discussions` 导航高亮 + `updateNav` 讨论链接显隐
+- [x] 前端 `web/js/api.js`：新增 20 个讨论/评论/点赞 API 方法
+- [x] `web/index.html`：引入 marked.js CDN (v11.1.1)，导航栏新增「讨论」链接，题目详情页新增 Tab 结构
+- [x] `problemDetail.js`：「题目描述 | 讨论」Tab 切换，讨论 Tab 委托 `initProblemCommentsTab()` 加载
+- [x] `style_v2.css`：讨论卡片/帖子详情/评论/回复/点赞/问题 Tab/Markdown 渲染 6 套样式（相册+白模式双主题）
+- [x] BUILD PASS：编译通过，0 error 0 warning
 
 ## 12. 验收标准
 
@@ -942,6 +1163,17 @@ MioOJ/
 | AC-55 | 编辑器主题 | 题目详情页可选择 ACE 主题（至少浅色+深色各一种），选择持久化 |
 | AC-56 | 结果页再试 | 判题结果页提供「再试一次」按钮回到对应题目 |
 | AC-57 | 公告导航入口 | 导航栏「公告」链接跳转 `#/announcements`；未登录也可访问 |
+| AC-58 | 默认头像分配 | 新用户注册后随机分配一个系统默认头像，显示在导航栏和用户中心 |
+| AC-59 | 自定义头像上传 | 用户可在设置面板或用户中心上传自定义头像，支持裁剪（1:1 正方形），上传后立即生效 |
+| AC-60 | 头像恢复默认 | 用户可点击「恢复默认头像」删除自定义头像，重新随机分配系统默认头像 |
+| AC-61 | 大讨论发帖 | 登录用户在 `#/discussions` 点击「发帖」输入 Markdown 正文提交 |
+| AC-62 | Markdown 渲染 | 帖子/回复的 Markdown 正文正确渲染（标题、粗体、代码块、链接等） |
+| AC-63 | 二级嵌套回复 | 用户可回复帖子（一级），也可回复别人的回复（二级），UI 缩进展示 |
+| AC-64 | 点赞去重 | 每人每帖/每条回复只能点赞一次，再次点击取消点赞，后端 UNIQUE 约束兜底 |
+| AC-65 | 讨论权限 | 用户可删除自己的帖子/回复；管理员可删除任意帖子/回复 |
+| AC-66 | 讨论分页 | 讨论列表和回复列表分页加载（20条/页） |
+| AC-67 | 题目讨论 Tab | 题目详情页展示「题目描述」和「讨论」两个 Tab，切换流畅 |
+| AC-68 | 讨论导航 | 导航栏「讨论」链接跳转 `#/discussions`，当前页高亮 |
 
 ---
 
@@ -974,6 +1206,7 @@ MioOJ/
 | `libssl-dev` | OpenSSL 头文件（SHA256 / 随机数） | apt | ✅ 已安装 |
 
 | `ACE Editor` | 代码编辑器（语法高亮/自动补全） | CDN (cdnjs) | ✅ 已集成（v1.36.2） |
+| `marked.js` | Markdown 渲染（讨论功能） | CDN (cdnjs) | ⬜ 讨论功能开发时引入 |
 
 | `cmake` (≥3.14) | 构建系统（二选一） | apt | ⬜ 可选安装 |
 

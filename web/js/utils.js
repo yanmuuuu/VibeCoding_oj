@@ -57,3 +57,12 @@ function renderNotFound(main) {
 function renderError(main, msg) {
     main.innerHTML = '<div class="error-page"><h2>出错了</h2><p>' + escapeHtml(msg) + '</p><a href="#/problems">返回题目列表</a></div>';
 }
+function renderMarkdown(text) {
+    if (!text) return '';
+    if (typeof marked !== 'undefined') {
+        marked.setOptions({ breaks: true, gfm: true });
+        var raw = marked.parse(text);
+        return raw.replace(/<table>/g, '<table class="md-table">');
+    }
+    return escapeHtml(text).replace(/\n/g, '<br>');
+}

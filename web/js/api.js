@@ -53,4 +53,32 @@ const API = {
     createAnnouncement(data) { return this.post('/api/admin/announcements', data); },
     updateAnnouncement(id, data) { return this.put('/api/admin/announcements/' + id, data); },
     deleteAnnouncement(id) { return this.del('/api/admin/announcements/' + id); },
+    uploadAvatar(formData) {
+        return fetch('/api/user/avatar/upload', { method: 'POST', credentials: 'same-origin', body: formData })
+            .then(r => r.json().then(d => { if (!r.ok) throw new Error(d.error || '上传失败'); return d; }));
+    },
+    deleteAvatar() { return this.del('/api/user/avatar'); },
+    getDiscussions(page) { return this.get('/api/discussions?page=' + (page||1)); },
+    getDiscussion(id) { return this.get('/api/discussions/' + id); },
+    createDiscussion(content) { return this.post('/api/discussions', {content}); },
+    deleteDiscussion(id) { return this.del('/api/discussions/' + id); },
+    likeDiscussion(id) { return this.post('/api/discussions/' + id + '/like'); },
+    unlikeDiscussion(id) { return this.del('/api/discussions/' + id + '/like'); },
+    createDiscussionReply(id, content, parentReplyId) {
+        return this.post('/api/discussions/' + id + '/replies', parentReplyId ? {content, parent_reply_id: String(parentReplyId)} : {content});
+    },
+    deleteDiscussionReply(did, rid) { return this.del('/api/discussions/' + did + '/replies/' + rid); },
+    likeDiscussionReply(did, rid) { return this.post('/api/discussions/' + did + '/replies/' + rid + '/like'); },
+    unlikeDiscussionReply(did, rid) { return this.del('/api/discussions/' + did + '/replies/' + rid + '/like'); },
+    getComments(qid, page) { return this.get('/api/problems/' + qid + '/comments?page=' + (page||1)); },
+    createComment(qid, content) { return this.post('/api/problems/' + qid + '/comments', {content}); },
+    deleteComment(qid, cid) { return this.del('/api/problems/' + qid + '/comments/' + cid); },
+    likeComment(qid, cid) { return this.post('/api/problems/' + qid + '/comments/' + cid + '/like'); },
+    unlikeComment(qid, cid) { return this.del('/api/problems/' + qid + '/comments/' + cid + '/like'); },
+    createCommentReply(qid, cid, content, parentReplyId) {
+        return this.post('/api/problems/' + qid + '/comments/' + cid + '/replies', parentReplyId ? {content, parent_reply_id: String(parentReplyId)} : {content});
+    },
+    deleteCommentReply(qid, cid, rid) { return this.del('/api/problems/' + qid + '/comments/' + cid + '/replies/' + rid); },
+    likeCommentReply(qid, cid, rid) { return this.post('/api/problems/' + qid + '/comments/' + cid + '/replies/' + rid + '/like'); },
+    unlikeCommentReply(qid, cid, rid) { return this.del('/api/problems/' + qid + '/comments/' + cid + '/replies/' + rid + '/like'); },
 };

@@ -4,6 +4,8 @@
 #include <fstream>
 #include <sstream>
 #include <csignal>
+#include <cstdlib>
+#include <ctime>
 #include <sys/stat.h>
 
 #include "config.hpp"
@@ -22,6 +24,9 @@ void register_user_routes(httplib::Server& svr);
 void register_admin_routes(httplib::Server& svr);
 void register_background_routes(httplib::Server& svr);
 void register_announcement_routes(httplib::Server& svr);
+void register_avatar_routes(httplib::Server& svr);
+void register_discussion_routes(httplib::Server& svr);
+void register_comment_routes(httplib::Server& svr);
 
 static std::string render_template(const std::string& path) {
     ctemplate::Template* tpl = ctemplate::Template::GetTemplate(path, ctemplate::DO_NOT_STRIP);
@@ -57,6 +62,7 @@ static void serve_spa(httplib::Server& svr) {
 int main() {
     // Ignore SIGPIPE to prevent crashes when clients disconnect mid-response
     signal(SIGPIPE, SIG_IGN);
+    srand(static_cast<unsigned int>(time(nullptr)));
 
     // Init temp directory
     if (!init_tmp_dir(g_config.tmp_dir)) {
@@ -102,6 +108,9 @@ int main() {
     register_admin_routes(svr);
     register_background_routes(svr);
     register_announcement_routes(svr);
+    register_avatar_routes(svr);
+    register_discussion_routes(svr);
+    register_comment_routes(svr);
 
     serve_spa(svr);
 
