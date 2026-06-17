@@ -42,7 +42,7 @@ async function loadAnnouncements(content) {
             content: $('#a-content').value.trim(),
             is_pinned: $('#a-pinned').checked
         };
-        if (!data.title || !data.content) { alert('标题和内容不能为空'); return; }
+        if (!data.title || !data.content) { await showAlert('标题和内容不能为空'); return; }
         try {
             if (editId) {
                 await API.updateAnnouncement(editId, data);
@@ -56,7 +56,7 @@ async function loadAnnouncements(content) {
             this.querySelector('button[type="submit"]').textContent = '发布';
             loadAnnouncements(content);
         } catch(e) {
-            alert('操作失败: ' + e.message);
+            await showAlert('操作失败: ' + e.message);
         }
     });
 
@@ -75,12 +75,12 @@ async function loadAnnouncements(content) {
     // Delete announcement
     $$('.delete-announce').forEach(btn => {
         btn.addEventListener('click', async function() {
-            if (!confirm('确定删除此公告？')) return;
+            if (!(await showConfirm('确定删除此公告？', { danger: true }))) return;
             try {
                 await API.deleteAnnouncement(this.dataset.id);
                 loadAnnouncements(content);
             } catch(e) {
-                alert('删除失败: ' + e.message);
+                await showAlert('删除失败: ' + e.message);
             }
         });
     });

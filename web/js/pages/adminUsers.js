@@ -8,15 +8,18 @@ async function loadUsers(content) {
     if (data.users && data.users.length > 0) {
         data.users.forEach(u => {
             const adminBadge = u.is_admin ? '<span class="badge badge-gold">管理员</span>' : '<span class="badge">用户</span>';
+            const banBadge = u.is_banned ? '<span class="badge badge-red">已封禁</span>' : '';
             const toggleText = u.is_admin ? '取消管理' : '设为管理';
-            const toggleClass = u.is_admin ? 'btn-sm' : 'btn-sm';
+            const banText = u.is_banned ? '解封' : '封禁';
             rows += `<tr>
                 <td>${u.id}</td>
-                <td>${escapeHtml(u.username)}</td>
+                <td>${escapeHtml(u.username)} ${banBadge}</td>
                 <td>${adminBadge}</td>
                 <td>${formatDate(u.created_at)}</td>
-                <td>
+                <td class="user-actions-cell">
                     <button class="btn-sm toggle-admin" data-id="${u.id}" data-admin="${u.is_admin}">${toggleText}</button>
+                    <button class="btn-sm toggle-ban" data-id="${u.id}" data-banned="${u.is_banned}">${banText}</button>
+                    <button class="btn-sm reset-pwd" data-id="${u.id}">重置密码</button>
                     <button class="btn-sm btn-danger delete-user" data-id="${u.id}">删除</button>
                 </td>
             </tr>`;
@@ -35,7 +38,6 @@ async function loadUsers(content) {
     </table>
     <div class="pagination" style="margin-top:14px;"></div>`;
 
-    // Pagination
     const totalPages = Math.ceil(data.total / 20);
     if (totalPages > 1) {
         let pagesHtml = '';
@@ -52,7 +54,6 @@ async function loadUsers(content) {
         });
     }
 
-    // Search
     $('#user-search').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
             content.dataset.userSearch = this.value.trim();
@@ -66,31 +67,64 @@ async function loadUsers(content) {
         loadUsers(content);
     });
 
-    // Toggle admin
     $$('.toggle-admin').forEach(btn => {
         btn.addEventListener('click', async function() {
             const id = this.dataset.id;
             const setAdmin = this.dataset.admin === 'true' ? false : true;
             const msg = setAdmin ? '确定要提升此用户为管理员吗？' : '确定要取消此用户的管理员权限吗？';
-            if (!confirm(msg)) return;
+            if (!(await showConfirm(msg))) return;
             try {
                 await API.toggleUserAdmin(id, setAdmin);
                 loadUsers(content);
             } catch(e) {
-                alert('操作失败: ' + e.message);
+                showToast('操作失败: ' + e.message, 'error');
             }
         });
     });
 
-    // Delete user
+    $$('.toggle-ban').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const id = this.dataset.id;
+            const banned = this.dataset.banned !== 'true';
+            const msg = banned ? '确定封禁此用户？将立即踢下线且无法登录。' : '确定解封此用户？';
+            if (!(await showConfirm(msg, { danger: banned }))) return;
+            try {
+                await API.banUser(id, banned);
+                showToast(banned ? '用户已封禁' : '用户已解封', 'success');
+                loadUsers(content);
+            } catch(e) {
+                showToast('操作失败: ' + e.message, 'error');
+            }
+        });
+    });
+
+    $$('.reset-pwd').forEach(btn => {
+        btn.addEventListener('click', async function() {
+            const id = this.dataset.id;
+            const password = await showPrompt('请输入新密码（至少 8 位）：', {
+                inputType: 'password',
+                inputPlaceholder: '至少 8 位'
+            });
+            if (!password) return;
+            if (password.length < 8) { showToast('密码至少 8 位', 'error'); return; }
+            if (!(await showConfirm('确定重置该用户密码？将清除其所有登录会话。', { danger: true }))) return;
+            try {
+                await API.resetUserPassword(id, password);
+                showToast('密码已重置', 'success');
+            } catch(e) {
+                showToast('重置失败: ' + e.message, 'error');
+            }
+        });
+    });
+
     $$('.delete-user').forEach(btn => {
         btn.addEventListener('click', async function() {
-            if (!confirm('确定要删除此用户吗？此操作不可恢复！')) return;
+            if (!(await showConfirm('确定要删除此用户吗？此操作不可恢复！', { danger: true }))) return;
             try {
                 await API.deleteUser(this.dataset.id);
                 loadUsers(content);
             } catch(e) {
-                alert('删除失败: ' + e.message);
+                showToast('删除失败: ' + e.message, 'error');
             }
         });
     });

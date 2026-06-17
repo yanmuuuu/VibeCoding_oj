@@ -6,6 +6,7 @@ CREATE TABLE users (
     username        VARCHAR(64)  NOT NULL UNIQUE,
     password_hash   VARCHAR(256) NOT NULL,
     is_admin        TINYINT(1)   NOT NULL DEFAULT 0,
+    is_banned       TINYINT(1)   NOT NULL DEFAULT 0,
     background_url  VARCHAR(512) DEFAULT NULL,
     avatar_url      VARCHAR(512) DEFAULT NULL,
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -28,6 +29,7 @@ CREATE TABLE questions (
     sample_input    TEXT,
     sample_output   TEXT,
     difficulty      ENUM('简单','中等','困难') NOT NULL DEFAULT '简单',
+    reference_code  TEXT         DEFAULT NULL,
     time_limit      INT          NOT NULL DEFAULT 1,
     memory_limit    INT          NOT NULL DEFAULT 256,
     is_visible      TINYINT(1)   NOT NULL DEFAULT 1,

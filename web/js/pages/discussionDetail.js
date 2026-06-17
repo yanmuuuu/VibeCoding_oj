@@ -51,7 +51,7 @@ function buildDiscussionDetail(container, d) {
             }),
             canDelete ? el('button', {className: 'btn-sm btn-delete-discussion', textContent: '删除',
                 onclick: async function() {
-                    if (!confirm('确定要删除这条帖子吗？')) return;
+                    if (!(await showConfirm('确定要删除这条帖子吗？', { danger: true }))) return;
                     try { await API.deleteDiscussion(d.id); App.navigate('#/discussions'); }
                     catch(e) { showToast('删除失败: ' + e.message, 'error'); }
                 }
@@ -100,7 +100,7 @@ function renderReplies(container, replies, discussionId) {
                 }),
                 canDeleteReply ? el('button', {className: 'btn-sm', textContent: '删除',
                     onclick: async function() {
-                        if (!confirm('确定要删除这条回复吗？')) return;
+                        if (!(await showConfirm('确定要删除这条回复吗？', { danger: true }))) return;
                         try {
                             await API.deleteDiscussionReply(discussionId, r.id);
                             const updated = await API.getDiscussion(discussionId);

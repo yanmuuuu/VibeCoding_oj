@@ -44,13 +44,17 @@
 - 统计语义："通过" = 有 AC 记录的题目数，"尝试" = 有提交但无 AC 的题目数（二者互斥不重复计数）
 
 ### 2.5 后台管理（管理员）
-- Tab 导航布局：统计 | 题目管理 | 用户管理 | 公告管理
-- **统计仪表盘**：总用户数、总题目数、总提交数
-- **题目管理**：列表（含可见/隐藏题目）、批量操作（全选/隐藏/显示/删除）、创建/编辑
-- **录题/编辑题目标程**：录入 C++ 标程代码，系统自动编译运行生成每组输入的期望输出（`POST /api/admin/reference/generate`）
-- **测试用例管理**：增删改查，支持行内编辑（input/expected_output/order_index）
-- **用户管理**：用户列表（分页+搜索）、删除用户（级联删除数据库关联记录 + 清理 `web/backgrounds/user_*`、`web/avatars/user_*` 上传文件）、提升/取消管理员权限
-- **系统公告**：管理员可发布/编辑/删除公告，全站可见（`#/announcements` 公共页面）
+- Tab 导航布局：统计 | 题目管理 | 用户管理 | 公告管理 | **讨论管理**
+- **统计仪表盘**：总用户数、总题目数、总提交数 + **最近动态**（最新提交/新用户/新讨论各 10 条）
+- **题目管理**：列表（含难度/可见/隐藏）、批量操作、**三步向导新建**（基本信息 → 标程 → 测试用例，可暂存草稿）、**单页编辑**
+- **录题/标程**：`questions.reference_code` 持久化；ACE 编辑器录入 C++ 标程；一键编译运行生成期望输出并 **AC 校验**
+- **发布校验**：设为「可见」须 **≥1 测试用例 + 已保存标程**，否则后端直接拒绝
+- **标程变更提示**：编辑页修改标程后提示「期望输出可能过期，请重新生成」
+- **题目描述**：Markdown 录入 + 实时预览；**预览做题页**（新标签打开 `#/problems/:id`，管理员可查看隐藏题）
+- **测试用例管理**：增删改查、行内编辑、截断预览 + **展开全文弹窗**
+- **用户管理**：列表（分页+搜索）、删除用户（级联删库 + 清理 `user_*` 文件）、升降管理员、**封禁/解封**（立即踢 session）、**管理员重置密码**（设定新密码并清 session）
+- **讨论管理**：列表 + 搜索、删帖/删回复、跳转原帖
+- **系统公告**：管理员发布/编辑/删除公告
 - **管理员导航栏**：隐藏「我的」链接，显示：题目 | 公告 | 讨论 | 管理 | 退出
 - **普通用户导航栏**：题目 | 公告 | 讨论 | 我的 | 退出
 - **未登录导航栏**：公告 | 讨论 | 登录（公告和讨论为公开页）
@@ -63,6 +67,11 @@
 - 后端错误信息中文化（大部分 API 响应 message 已中文化，少数边缘路径保留英文）
 - 登录页仅提示"用户名或密码错误"，不区分具体原因（防枚举攻击）
 - **网站图标（favicon）**：从 `web/icons/` 目录随机选取一张图片作为浏览器标签页图标；用户向该目录放入图片后刷新页面即可生效
+- **确认/提示弹窗**：全站统一 `showConfirm` / `showAlert` / `showPrompt`（`utils.js`），替代浏览器原生 `confirm` / `alert` / `prompt`
+  - **相册模式**：黑金双层金边弹窗，与导航栏/设置面板风格一致；删除/封禁/重置等危险操作确认按钮红色强调
+  - **LeetCode 白模式**（`body.lc-white`）：白底简约卡片弹窗，与页面浅色风格一致
+  - 支持 Esc 取消、Enter 确认、点击遮罩关闭（alert 仅确定）
+  - 轻量操作反馈仍使用 Toast（`showToast`），不阻塞页面
 
 ### 2.7 讨论系统
 - **大讨论区**：全局讨论版块，用户可发帖（纯正文、无标题）、回复（二级嵌套）、点赞
@@ -151,6 +160,7 @@ CREATE TABLE users (
     username        VARCHAR(64)  NOT NULL UNIQUE,
     password_hash   VARCHAR(256) NOT NULL,          -- Argon2id
     is_admin        TINYINT(1)   NOT NULL DEFAULT 0,
+    is_banned       TINYINT(1)   NOT NULL DEFAULT 0,
     background_url  VARCHAR(512) DEFAULT NULL,       -- 用户自定义背景图路径，NULL=使用系统相册随机图
     avatar_url      VARCHAR(512) DEFAULT NULL,       -- 用户头像路径，注册时随机分配系统默认头像
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -181,6 +191,7 @@ CREATE TABLE questions (
     sample_input    TEXT,
     sample_output   TEXT,
     difficulty      ENUM('简单','中等','困难') NOT NULL DEFAULT '简单',  -- 难度分级（中文字段值）
+    reference_code  TEXT         DEFAULT NULL,       -- 标程 C++ 代码
     time_limit      INT          NOT NULL DEFAULT 1,   -- 秒
     memory_limit    INT          NOT NULL DEFAULT 256, -- MB
     is_visible      TINYINT(1)   NOT NULL DEFAULT 1,   -- 0=隐藏
@@ -367,21 +378,25 @@ CREATE TABLE comment_likes (
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |---|---|---|---|
-| GET | `/api/admin/stats` | 统计仪表盘（总用户/题目/提交数） | 需要 + admin |
-| GET | `/api/admin/questions` | 题目列表（含隐藏题目） | 需要 + admin |
+| GET | `/api/admin/stats` | 统计仪表盘 + 最近动态（提交/用户/讨论各 10 条） | 需要 + admin |
+| GET | `/api/admin/questions` | 题目列表（含隐藏题目、难度） | 需要 + admin |
 | GET | `/api/admin/questions/:id` | 单题详情（含隐藏题目） | 需要 + admin |
-| POST | `/api/admin/questions` | 创建题目 | 需要 + admin |
-| PUT | `/api/admin/questions/:id` | 编辑题目 | 需要 + admin |
+| POST | `/api/admin/questions` | 创建题目（草稿，`is_visible` 强制为 0；必填难度） | 需要 + admin |
+| PUT | `/api/admin/questions/:id` | 编辑题目（含 `difficulty`、`reference_code`；发布时校验用例+标程） | 需要 + admin |
 | DELETE | `/api/admin/questions/:id` | 删除题目 | 需要 + admin |
-| POST | `/api/admin/questions/batch` | 批量操作（hide/show/delete，body: {action, ids}） | 需要 + admin |
+| POST | `/api/admin/questions/batch` | 批量操作（hide/show/delete，body: {action, ids}）；`show` 时逐题校验发布条件 | 需要 + admin |
 | GET | `/api/admin/questions/:id/testcases` | 获取测试用例列表 | 需要 + admin |
 | POST | `/api/admin/questions/:id/testcases` | 添加测试用例 | 需要 + admin |
 | PUT | `/api/admin/questions/:id/testcases/:tc_id` | 编辑测试用例 | 需要 + admin |
 | DELETE | `/api/admin/questions/:id/testcases/:tc_id` | 删除测试用例 | 需要 + admin |
-| POST | `/api/admin/reference/generate` | 编译运行标程生成期望输出（body: {code, input_data}，多组输入用 \|\|\| 分隔） | 需要 + admin |
-| GET | `/api/admin/users` | 用户列表（分页+搜索，参数: page, search） | 需要 + admin |
+| POST | `/api/admin/reference/generate` | 编译运行标程生成期望输出（body: {code, input_data}，多组输入用 \|\|\| 分隔）；返回 `outputs` + `statuses`（逐用例 AC 校验） | 需要 + admin |
+| GET | `/api/admin/users` | 用户列表（分页+搜索，含 `is_banned`） | 需要 + admin |
 | DELETE | `/api/admin/users/:id` | 删除用户（级联删除 sessions/submissions/讨论/评论等关联数据；删除 `web/backgrounds/user_{id}.*` 与 `web/avatars/user_{id}.*` 上传文件） | 需要 + admin |
 | PUT | `/api/admin/users/:id/admin` | 提升/取消管理员（body: {is_admin: bool}） | 需要 + admin |
+| PUT | `/api/admin/users/:id/ban` | 封禁/解封用户（body: {is_banned: bool}）；封禁时删除其全部 session | 需要 + admin |
+| PUT | `/api/admin/users/:id/password` | 管理员重置用户密码（body: {password}，≥8 位）；重置后删除其全部 session | 需要 + admin |
+| GET | `/api/admin/discussions` | 讨论列表（分页+搜索，参数: page, search） | 需要 + admin |
+| GET | `/api/admin/discussions/:id/replies` | 某帖全部回复（管理用） | 需要 + admin |
 | GET | `/api/admin/announcements` | 公告列表（管理员视图） | 需要 + admin |
 | POST | `/api/admin/announcements` | 发布公告 | 需要 + admin |
 | PUT | `/api/admin/announcements/:id` | 编辑公告 | 需要 + admin |
@@ -518,12 +533,14 @@ CREATE TABLE comment_likes (
 | `#/result/:submissionId` | 判题结果页 | 测试点方块网格 + 详情展开（提交后跳转到此页） |
 | `#/user` | 用户中心 | 提交历史（管理员不可见，导航栏隐藏） |
 | `#/announcements` | 系统公告页 | 公开页面，展示所有公告 |
-| `#/admin` | 后台管理首页 | 仅管理员，Tab 切换：统计/题目/用户/公告 |
+| `#/admin` | 后台管理首页 | 仅管理员，Tab：统计/题目/用户/公告/讨论 |
 | `#/admin/stats` | 管理员 → 统计 | |
 | `#/admin/questions` | 管理员 → 题目管理 | 列表+批量操作+创建 |
-| `#/admin/questions/:id` | 管理员 → 编辑题目 | 编辑题目 + 测试用例管理 + 标程自动生成 |
-| `#/admin/users` | 管理员 → 用户管理 | 分页+搜索+权限切换+删除 |
 | `#/admin/announcements` | 管理员 → 公告管理 | 发布/编辑/删除公告 |
+| `#/admin/questions/new` | 管理员 → 新建题目向导 | 三步：基本信息 → 标程 → 测试用例 |
+| `#/admin/questions/:id` | 管理员 → 编辑题目 | 单页：基本信息+Markdown预览+ACE标程+测试用例+预览做题页 |
+| `#/admin/users` | 管理员 → 用户管理 | 分页+搜索+封禁+重置密码+删除 |
+| `#/admin/discussions` | 管理员 → 讨论管理 | 搜索+删帖/删回复 |
 | `#/discussions` | 大讨论列表页 | 卡片式信息流，20条/页，需要登录 |
 | `#/discussions/:id` | 帖子详情页 | Markdown 正文渲染 + 回复列表（二级嵌套）+ 点赞 |
 | `#/404` | 404 页面 | 路由未匹配 |
@@ -1128,6 +1145,25 @@ MioOJ/
 - [x] 系统默认资源不受影响：系统壁纸（非 `user_*`）、系统默认头像（`at*.webp`）保留
 - [x] BUILD PASS：编译通过，0 error
 
+### Phase 27 — 管理员后台增强 ✅
+- [x] 数据库：`questions.reference_code TEXT`；`users.is_banned TINYINT(1)`（`migrate_phase27.sql`）
+- [x] 新建题目 **三步向导**：基本信息（Markdown 预览）→ ACE 标程 → 测试用例；每步可暂存草稿
+- [x] 编辑题目 **单页分区**：难度必选、ACE 标程持久化、标程变更过期提示、预览做题页（新标签）
+- [x] **发布校验**：`is_visible=1` 须 ≥1 测试用例 + 非空 `reference_code`；批量「显示」同样校验
+- [x] 标程生成增强：`POST /api/admin/reference/generate` 返回 `statuses` 逐用例 AC 校验
+- [x] 统计 Tab：最近提交/新用户/新讨论各 10 条
+- [x] 新增 **讨论管理** Tab：列表+搜索+删帖/删回复
+- [x] 用户管理：封禁/解封（踢 session + 禁止登录）、管理员设定新密码并重置 session
+- [x] 管理员可预览隐藏题目：`GET /api/problems/:id` 对 admin 跳过 `is_visible` 过滤
+- [x] BUILD PASS：编译通过
+
+### Phase 28 — 确认/提示弹窗 UI 统一 ✅
+- [x] `utils.js` 新增 `showConfirm` / `showAlert` / `showPrompt`，Promise 异步 API
+- [x] 相册模式：黑金双层金边 `.mio-dialog`；危险操作（删除/封禁/重置）确认按钮红色强调
+- [x] LeetCode 白模式：白底简约卡片弹窗，与 `body.lc-white` 主题一致
+- [x] 全站替换原生 `confirm` / `alert` / `prompt`（管理后台、讨论、设置面板等）
+- [x] 管理员重置密码使用 `showPrompt` + `password` 输入框
+
 ## 12. 验收标准
 
 | 编号 | 验收项 | 标准 |
@@ -1203,6 +1239,16 @@ MioOJ/
 | AC-69 | 随机网站图标 | 向 `web/icons/` 放入至少一张图片后，刷新页面浏览器标签页显示随机选取的 favicon |
 | AC-70 | favicon API | `GET /api/icons` 无需登录，返回图标路径数组；`GET /favicon.ico` 随机返回目录中的一张图片 |
 | AC-71 | 删用户清文件 | 管理员删除用户后，该用户在 `web/backgrounds/`、`web/avatars/` 下的 `user_{id}.*` 上传文件被删除；系统默认壁纸/头像不受影响 |
+| AC-72 | 录题向导 | 新建题目三步向导可暂存草稿；发布前须有用例+标程 |
+| AC-73 | 标程持久化 | 编辑页回显 `reference_code`；修改标程后提示重新生成期望输出 |
+| AC-74 | 发布拦截 | 无标程或无测试用例时勾选「可见」或批量显示，后端返回 400 拒绝 |
+| AC-75 | 标程校验 | 生成期望输出后返回逐用例 `statuses`，全部 AC 时前端提示成功 |
+| AC-76 | 统计动态 | 管理统计页展示最近 10 条提交/用户/讨论 |
+| AC-77 | 讨论管理 | 管理后台讨论 Tab 可搜索、删帖、删回复 |
+| AC-78 | 用户封禁 | 封禁用户无法登录；现有 session 立即失效；可解封 |
+| AC-79 | 重置密码 | 管理员可为用户设定新密码（≥8 位），并重置其登录态 |
+| AC-80 | 主题弹窗 | 相册模式下删除/确认操作显示黑金风格自定义弹窗，非浏览器原生框 |
+| AC-81 | 白模式弹窗 | LeetCode 白模式下确认/提示/输入弹窗为白底简约卡片，与页面风格一致；危险操作确认按钮红色强调 |
 
 ---
 

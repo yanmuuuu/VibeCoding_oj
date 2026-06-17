@@ -45,9 +45,10 @@ void register_problem_routes(httplib::Server& svr) {
 
         int id = std::stoi(req.matches[1]);
         auto db = g_db->acquire();
+        std::string visibility = user.is_admin ? "" : " AND is_visible=1";
         db->query("SELECT id, title, description, input_format, output_format, "
                   "sample_input, sample_output, difficulty, time_limit, memory_limit "
-                  "FROM questions WHERE id=" + std::to_string(id) + " AND is_visible=1");
+                  "FROM questions WHERE id=" + std::to_string(id) + visibility);
 
         MYSQL_RES* result = db->store_result();
         if (!result || mysql_num_rows(result) == 0) {

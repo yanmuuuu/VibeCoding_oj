@@ -178,7 +178,7 @@ function buildProblemCommentDetail(detailContainer, qid, c) {
             }),
             canDelete ? el('button', {className: 'btn-sm btn-delete-discussion', textContent: '删除',
                 onclick: async function() {
-                    if (!confirm('确定要删除这条帖子吗？')) return;
+                    if (!(await showConfirm('确定要删除这条帖子吗？', { danger: true }))) return;
                     try {
                         await API.deleteComment(qid, c.id);
                         showToast('已删除', 'success');
@@ -234,7 +234,7 @@ function renderProblemCommentReplies(container, replies, qid, commentId, detailC
                 }),
                 canDeleteReply ? el('button', {className: 'btn-sm', textContent: '删除',
                     onclick: async function() {
-                        if (!confirm('确定要删除这条回复吗？')) return;
+                        if (!(await showConfirm('确定要删除这条回复吗？', { danger: true }))) return;
                         try {
                             await API.deleteCommentReply(qid, commentId, r.id);
                             var updated = await fetchProblemCommentById(qid, commentId);

@@ -118,6 +118,7 @@ const App = {
             '/admin/questions': 'admin',
             '/admin/users': 'admin',
             '/admin/announcements': 'admin',
+            '/admin/discussions': 'admin',
             '/announcements': 'announcements',
             '/discussions': 'discussions',
             '/404': 'notFound',
@@ -272,35 +273,35 @@ function initSettings() {
 
     var deleteBgBtn = document.getElementById('delete-bg-btn');
     if (deleteBgBtn) {
-        deleteBgBtn.addEventListener('click', function() {
-            if (!confirm('确定要删除你的自定义壁纸吗？删除后将恢复系统背景。')) return;
+        deleteBgBtn.addEventListener('click', async function() {
+            if (!(await showConfirm('确定要删除你的自定义壁纸吗？删除后将恢复系统背景。', { danger: true }))) return;
             deleteBgBtn.textContent = '...';
             deleteBgBtn.disabled = true;
-            window.deleteCustomBackground().then(function() {
+            try {
+                await window.deleteCustomBackground();
+            } catch (e) {
+                await showAlert('删除失败: ' + e.message);
+            } finally {
                 deleteBgBtn.textContent = '删除';
                 deleteBgBtn.disabled = false;
-            }).catch(function(e) {
-                alert('删除失败: ' + e.message);
-                deleteBgBtn.textContent = '删除';
-                deleteBgBtn.disabled = false;
-            });
+            }
         });
     }
 
     var resetBgBtn = document.getElementById('reset-bg-btn');
     if (resetBgBtn) {
-        resetBgBtn.addEventListener('click', function() {
-            if (!confirm('确定要恢复默认背景设置吗？这将删除自定义壁纸并重置所有背景选项。')) return;
+        resetBgBtn.addEventListener('click', async function() {
+            if (!(await showConfirm('确定要恢复默认背景设置吗？这将删除自定义壁纸并重置所有背景选项。', { danger: true }))) return;
             resetBgBtn.textContent = '...';
             resetBgBtn.disabled = true;
-            window.resetAllBackgrounds().then(function() {
+            try {
+                await window.resetAllBackgrounds();
+            } catch (e) {
+                await showAlert('恢复失败: ' + e.message);
+            } finally {
                 resetBgBtn.textContent = '恢复默认';
                 resetBgBtn.disabled = false;
-            }).catch(function(e) {
-                alert('恢复失败: ' + e.message);
-                resetBgBtn.textContent = '恢复默认';
-                resetBgBtn.disabled = false;
-            });
+            }
         });
     }
 
@@ -368,7 +369,7 @@ function initSettings() {
     var resetAvatarBtn = document.getElementById('reset-avatar-btn');
     if (resetAvatarBtn) {
         resetAvatarBtn.addEventListener('click', async function() {
-            if (!confirm('确定要恢复默认头像吗？')) return;
+            if (!(await showConfirm('确定要恢复默认头像吗？', { danger: true }))) return;
             try {
                 resetAvatarBtn.textContent = '...';
                 resetAvatarBtn.disabled = true;

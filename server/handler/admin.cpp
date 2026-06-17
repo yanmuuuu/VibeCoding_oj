@@ -5,10 +5,14 @@
 #include "../judge/compiler.hpp"
 #include "../judge/runner.hpp"
 #include "../config.hpp"
+#include "../util/crypto.hpp"
 #include <sstream>
 #include <string>
 #include <cstdlib>
 #include <filesystem>
+#include <vector>
+#include <algorithm>
+#include <cctype>
 
 namespace fs = std::filesystem;
 
@@ -111,6 +115,76 @@ static bool extract_bool(const std::string& body, const std::string& key) {
     return true;
 }
 
+static bool body_has_key(const std::string& body, const std::string& key) {
+    return body.find("\"" + key + "\"") != std::string::npos;
+}
+
+static bool valid_difficulty(const std::string& d) {
+    return d == "简单" || d == "中等" || d == "困难";
+}
+
+static std::string trim_copy(const std::string& s) {
+    size_t start = 0;
+    while (start < s.size() && std::isspace(static_cast<unsigned char>(s[start]))) start++;
+    size_t end = s.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(s[end - 1]))) end--;
+    return s.substr(start, end - start);
+}
+
+static std::string json_escape_str(const char* s) {
+    if (!s) return "";
+    std::string out;
+    for (const char* p = s; *p; ++p) {
+        switch (*p) {
+            case '"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: out += *p;
+        }
+    }
+    return out;
+}
+
+static int count_test_cases_for_question(DbConn& db, int qid) {
+    db.query("SELECT COUNT(*) FROM test_cases WHERE question_id=" + std::to_string(qid));
+    MYSQL_RES* r = db.store_result();
+    int count = 0;
+    if (r) {
+        MYSQL_ROW row = mysql_fetch_row(r);
+        if (row && row[0]) count = std::stoi(row[0]);
+        mysql_free_result(r);
+    }
+    return count;
+}
+
+static std::string get_saved_reference_code(DbConn& db, int qid) {
+    db.query("SELECT reference_code FROM questions WHERE id=" + std::to_string(qid));
+    MYSQL_RES* r = db.store_result();
+    std::string ref;
+    if (r) {
+        MYSQL_ROW row = mysql_fetch_row(r);
+        if (row && row[0]) ref = row[0];
+        mysql_free_result(r);
+    }
+    return ref;
+}
+
+static std::string validate_publish_requirements(DbConn& db, int qid, bool want_visible,
+                                                 const std::string& ref_override,
+                                                 bool has_ref_override) {
+    if (!want_visible) return "";
+    std::string ref = has_ref_override ? ref_override : get_saved_reference_code(db, qid);
+    if (trim_copy(ref).empty()) {
+        return "设为可见需要先保存标程代码";
+    }
+    if (count_test_cases_for_question(db, qid) <= 0) {
+        return "设为可见需要至少一个测试用例";
+    }
+    return "";
+}
+
 void register_admin_routes(httplib::Server& svr) {
     // Create question
     svr.Post("/api/admin/questions", [](const httplib::Request& req, httplib::Response& res) {
@@ -123,24 +197,44 @@ void register_admin_routes(httplib::Server& svr) {
         std::string output_format = extract_str(body, "output_format");
         std::string sample_input = extract_str(body, "sample_input");
         std::string sample_output = extract_str(body, "sample_output");
+        std::string difficulty = extract_str(body, "difficulty");
+        std::string reference_code = extract_str(body, "reference_code");
         int time_limit = extract_int(body, "time_limit");
         if (time_limit <= 0) time_limit = 1;
         int memory_limit = extract_int(body, "memory_limit");
         if (memory_limit <= 0) memory_limit = 256;
         bool is_visible = extract_bool(body, "is_visible");
 
+        if (title.empty() || description.empty()) {
+            res.status = 400;
+            res.set_content("{\"error\":\"标题和描述为必填\"}", "application/json");
+            return;
+        }
+        if (difficulty.empty()) difficulty = "简单";
+        if (!valid_difficulty(difficulty)) {
+            res.status = 400;
+            res.set_content("{\"error\":\"难度必须为：简单、中等、困难\"}", "application/json");
+            return;
+        }
+        if (is_visible) {
+            res.status = 400;
+            res.set_content("{\"error\":\"新建题目请先保存为草稿，添加测试用例后再发布\"}", "application/json");
+            return;
+        }
+
         auto db = g_db->acquire();
         std::ostringstream sql;
         sql << "INSERT INTO questions (title, description, input_format, output_format, "
-            << "sample_input, sample_output, time_limit, memory_limit, is_visible) VALUES ('"
+            << "sample_input, sample_output, difficulty, reference_code, time_limit, memory_limit, is_visible) VALUES ('"
             << db->escape(title) << "', '"
             << db->escape(description) << "', '"
             << db->escape(input_format) << "', '"
             << db->escape(output_format) << "', '"
             << db->escape(sample_input) << "', '"
-            << db->escape(sample_output) << "', "
-            << time_limit << ", " << memory_limit << ", "
-            << (is_visible ? 1 : 0) << ")";
+            << db->escape(sample_output) << "', '"
+            << db->escape(difficulty) << "', '"
+            << db->escape(reference_code) << "', "
+            << time_limit << ", " << memory_limit << ", 0)";
         db->query(sql.str());
         int new_id = db->last_insert_id();
         res.status = 201;
@@ -187,9 +281,25 @@ void register_admin_routes(httplib::Server& svr) {
         std::string outfmt = extract_str(body, "output_format");
         std::string sin = extract_str(body, "sample_input");
         std::string sout = extract_str(body, "sample_output");
+        std::string difficulty = extract_str(body, "difficulty");
+        std::string reference_code = extract_str(body, "reference_code");
+        bool has_reference_code = body_has_key(body, "reference_code");
         int tl = extract_int(body, "time_limit");
         int ml = extract_int(body, "memory_limit");
         bool vis = extract_bool(body, "is_visible");
+
+        if (!difficulty.empty() && !valid_difficulty(difficulty)) {
+            res.status = 400;
+            res.set_content("{\"error\":\"难度必须为：简单、中等、困难\"}", "application/json");
+            return;
+        }
+
+        std::string publish_err = validate_publish_requirements(*db, qid, vis, reference_code, has_reference_code);
+        if (!publish_err.empty()) {
+            res.status = 400;
+            res.set_content("{\"error\":\"" + json_escape(publish_err) + "\"}", "application/json");
+            return;
+        }
 
         add("title", title, false);
         add("description", desc, false);
@@ -197,6 +307,12 @@ void register_admin_routes(httplib::Server& svr) {
         add("output_format", outfmt, false);
         add("sample_input", sin, false);
         add("sample_output", sout, false);
+        if (!difficulty.empty()) add("difficulty", difficulty, false);
+        if (has_reference_code) {
+            if (!first) sql << ", ";
+            first = false;
+            sql << "reference_code='" << db->escape(reference_code) << "'";
+        }
         if (tl > 0) add("time_limit", std::to_string(tl), true);
         if (ml > 0) add("memory_limit", std::to_string(ml), true);
         add("is_visible", vis ? "1" : "0", true);
@@ -226,7 +342,7 @@ void register_admin_routes(httplib::Server& svr) {
         if (!check_admin(req, res)) return;
 
         auto db = g_db->acquire();
-        db->query("SELECT id, title, is_visible, time_limit, memory_limit FROM questions ORDER BY id ASC");
+        db->query("SELECT id, title, is_visible, time_limit, memory_limit, difficulty FROM questions ORDER BY id ASC");
         MYSQL_RES* result = db->store_result();
 
         std::string json = "[";
@@ -240,7 +356,8 @@ void register_admin_routes(httplib::Server& svr) {
                         ",\"title\":\"" + std::string(row[1] ? row[1] : "") + "\"" +
                         ",\"is_visible\":" + std::string(row[2] ? row[2] : "1") +
                         ",\"time_limit\":" + std::string(row[3] ? row[3] : "1") +
-                        ",\"memory_limit\":" + std::string(row[4] ? row[4] : "256") + "}";
+                        ",\"memory_limit\":" + std::string(row[4] ? row[4] : "256") +
+                        ",\"difficulty\":\"" + std::string(row[5] ? row[5] : "简单") + "\"}";
             }
         }
         json += "]";
@@ -255,7 +372,7 @@ void register_admin_routes(httplib::Server& svr) {
 
         auto db = g_db->acquire();
         db->query("SELECT id, title, description, input_format, output_format, "
-                  "sample_input, sample_output, time_limit, memory_limit, is_visible "
+                  "sample_input, sample_output, difficulty, reference_code, time_limit, memory_limit, is_visible "
                   "FROM questions WHERE id=" + std::to_string(qid));
 
         MYSQL_RES* result = db->store_result();
@@ -267,33 +384,19 @@ void register_admin_routes(httplib::Server& svr) {
         }
 
         MYSQL_ROW row = mysql_fetch_row(result);
-        auto esc = [](const char* s) -> std::string {
-            if (!s) return "";
-            std::string out;
-            for (const char* p = s; *p; ++p) {
-                switch (*p) {
-                    case '"': out += "\\\""; break;
-                    case '\\': out += "\\\\"; break;
-                    case '\n': out += "\\n"; break;
-                    case '\r': out += "\\r"; break;
-                    case '\t': out += "\\t"; break;
-                    default: out += *p;
-                }
-            }
-            return out;
-        };
-
         std::ostringstream json;
         json << "{\"id\":" << row[0]
-             << ",\"title\":\"" << esc(row[1]) << "\""
-             << ",\"description\":\"" << esc(row[2]) << "\""
-             << ",\"input_format\":\"" << esc(row[3]) << "\""
-             << ",\"output_format\":\"" << esc(row[4]) << "\""
-             << ",\"sample_input\":\"" << esc(row[5]) << "\""
-             << ",\"sample_output\":\"" << esc(row[6]) << "\""
-             << ",\"time_limit\":" << (row[7] ? row[7] : "1")
-             << ",\"memory_limit\":" << (row[8] ? row[8] : "256")
-             << ",\"is_visible\":" << (row[9] ? (std::stoi(row[9]) ? "true" : "false") : "true")
+             << ",\"title\":\"" << json_escape_str(row[1]) << "\""
+             << ",\"description\":\"" << json_escape_str(row[2]) << "\""
+             << ",\"input_format\":\"" << json_escape_str(row[3]) << "\""
+             << ",\"output_format\":\"" << json_escape_str(row[4]) << "\""
+             << ",\"sample_input\":\"" << json_escape_str(row[5]) << "\""
+             << ",\"sample_output\":\"" << json_escape_str(row[6]) << "\""
+             << ",\"difficulty\":\"" << json_escape_str(row[7] ? row[7] : "简单") << "\""
+             << ",\"reference_code\":\"" << json_escape_str(row[8]) << "\""
+             << ",\"time_limit\":" << (row[9] ? row[9] : "1")
+             << ",\"memory_limit\":" << (row[10] ? row[10] : "256")
+             << ",\"is_visible\":" << (row[11] ? (std::stoi(row[11]) ? "true" : "false") : "true")
              << "}";
         mysql_free_result(result);
         res.set_content(json.str(), "application/json");
@@ -428,10 +531,65 @@ void register_admin_routes(httplib::Server& svr) {
         r = db->store_result();
         if (r) { MYSQL_ROW row = mysql_fetch_row(r); if (row && row[0]) total_submissions = std::stoi(row[0]); mysql_free_result(r); }
 
+        bool first = true;
+        MYSQL_ROW row = nullptr;
         std::ostringstream json;
         json << "{\"total_users\":" << total_users
              << ",\"total_questions\":" << total_questions
-             << ",\"total_submissions\":" << total_submissions << "}";
+             << ",\"total_submissions\":" << total_submissions
+             << ",\"recent_submissions\":[";
+        db->query(
+            "SELECT s.id, u.username, q.title, s.status, s.created_at "
+            "FROM submissions s JOIN users u ON s.user_id=u.id "
+            "JOIN questions q ON s.question_id=q.id "
+            "ORDER BY s.id DESC LIMIT 10");
+        r = db->store_result();
+        first = true;
+        if (r) {
+            while ((row = mysql_fetch_row(r))) {
+                if (!first) json << ",";
+                first = false;
+                json << "{\"id\":" << (row[0] ? row[0] : "0")
+                     << ",\"username\":\"" << json_escape(row[1] ? row[1] : "") << "\""
+                     << ",\"question_title\":\"" << json_escape(row[2] ? row[2] : "") << "\""
+                     << ",\"status\":\"" << json_escape(row[3] ? row[3] : "") << "\""
+                     << ",\"created_at\":\"" << (row[4] ? row[4] : "") << "\"}";
+            }
+            mysql_free_result(r);
+        }
+        json << "],\"recent_users\":[";
+        db->query("SELECT id, username, created_at FROM users ORDER BY id DESC LIMIT 10");
+        r = db->store_result();
+        first = true;
+        if (r) {
+            while ((row = mysql_fetch_row(r))) {
+                if (!first) json << ",";
+                first = false;
+                json << "{\"id\":" << (row[0] ? row[0] : "0")
+                     << ",\"username\":\"" << json_escape(row[1] ? row[1] : "") << "\""
+                     << ",\"created_at\":\"" << (row[2] ? row[2] : "") << "\"}";
+            }
+            mysql_free_result(r);
+        }
+        json << "],\"recent_discussions\":[";
+        db->query(
+            "SELECT d.id, u.username, LEFT(d.content, 80) AS preview, d.created_at "
+            "FROM discussions d JOIN users u ON d.user_id=u.id "
+            "ORDER BY d.id DESC LIMIT 10");
+        r = db->store_result();
+        first = true;
+        if (r) {
+            while ((row = mysql_fetch_row(r))) {
+                if (!first) json << ",";
+                first = false;
+                json << "{\"id\":" << (row[0] ? row[0] : "0")
+                     << ",\"username\":\"" << json_escape(row[1] ? row[1] : "") << "\""
+                     << ",\"preview\":\"" << json_escape(row[2] ? row[2] : "") << "\""
+                     << ",\"created_at\":\"" << (row[3] ? row[3] : "") << "\"}";
+            }
+            mysql_free_result(r);
+        }
+        json << "]}";
         res.set_content(json.str(), "application/json");
     });
 
@@ -457,8 +615,29 @@ void register_admin_routes(httplib::Server& svr) {
         auto db = g_db->acquire();
         if (action == "delete") {
             db->query("DELETE FROM questions WHERE id IN (" + ids_str + ")");
+        } else if (action == "show") {
+            std::vector<int> ids;
+            size_t start = 0;
+            while (start < ids_str.size()) {
+                size_t comma = ids_str.find(',', start);
+                std::string part = ids_str.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+                if (!part.empty()) {
+                    try { ids.push_back(std::stoi(part)); } catch (...) {}
+                }
+                if (comma == std::string::npos) break;
+                start = comma + 1;
+            }
+            for (int qid : ids) {
+                std::string err = validate_publish_requirements(*db, qid, true, "", false);
+                if (!err.empty()) {
+                    res.status = 400;
+                    res.set_content("{\"error\":\"题目 #" + std::to_string(qid) + "：" + json_escape(err) + "\"}", "application/json");
+                    return;
+                }
+            }
+            db->query("UPDATE questions SET is_visible=1 WHERE id IN (" + ids_str + ")");
         } else {
-            db->query(std::string("UPDATE questions SET is_visible=") + (action == "show" ? "1" : "0") + " WHERE id IN (" + ids_str + ")");
+            db->query("UPDATE questions SET is_visible=0 WHERE id IN (" + ids_str + ")");
         }
         res.set_content("{\"ok\":true}", "application/json");
     });
@@ -495,6 +674,10 @@ void register_admin_routes(httplib::Server& svr) {
 
         std::ostringstream json;
         json << "{\"ok\":true,\"outputs\":[";
+        std::ostringstream statuses;
+        statuses << "[";
+        bool first_out = true;
+        bool first_status = true;
 
         if (!inputs_json.empty()) {
             std::vector<std::string> inputs;
@@ -507,7 +690,6 @@ void register_admin_routes(httplib::Server& svr) {
             }
             inputs.push_back(inputs_json.substr(start));
 
-            bool first = true;
             for (size_t i = 0; i < inputs.size(); i++) {
                 TestCase tc;
                 tc.id = static_cast<int>(i);
@@ -516,13 +698,21 @@ void register_admin_routes(httplib::Server& svr) {
                 tc.expected_output = "";
 
                 auto run_res = run_single(compile_res.binary_path, tc, 5, 512);
-                if (!first) json << ",";
-                first = false;
+                if (!first_out) json << ",";
+                first_out = false;
                 json << "\"" << esc(run_res.actual_output) << "\"";
+
+                TestCase verify_tc = tc;
+                verify_tc.expected_output = run_res.actual_output;
+                auto verify_res = run_single(compile_res.binary_path, verify_tc, 5, 512);
+                std::string status = (verify_res.status == "AC") ? "AC" : verify_res.status;
+                if (!first_status) statuses << ",";
+                first_status = false;
+                statuses << "\"" << esc(status) << "\"";
             }
         }
 
-        json << "]}";
+        json << "],\"statuses\":" << statuses.str() << "]}";
 
         // Clean up binary
         if (!compile_res.binary_path.empty()) {
@@ -557,7 +747,7 @@ void register_admin_routes(httplib::Server& svr) {
         MYSQL_RES* cr = db->store_result();
         if (cr) { MYSQL_ROW row = mysql_fetch_row(cr); if (row && row[0]) total = std::stoi(row[0]); mysql_free_result(cr); }
 
-        std::string sql = "SELECT id, username, is_admin, created_at FROM users";
+        std::string sql = "SELECT id, username, is_admin, is_banned, created_at FROM users";
         if (!search.empty()) {
             sql += " WHERE username LIKE '%" + db->escape(search) + "%'";
         }
@@ -576,7 +766,8 @@ void register_admin_routes(httplib::Server& svr) {
                 json << "{\"id\":" << (row[0] ? row[0] : "0")
                      << ",\"username\":\"" << json_escape(row[1] ? row[1] : "") << "\""
                      << ",\"is_admin\":" << (row[2] && std::stoi(row[2]) ? "true" : "false")
-                     << ",\"created_at\":\"" << (row[3] ? row[3] : "") << "\""
+                     << ",\"is_banned\":" << (row[3] && std::stoi(row[3]) ? "true" : "false")
+                     << ",\"created_at\":\"" << (row[4] ? row[4] : "") << "\""
                      << "}";
             }
         }
@@ -633,5 +824,131 @@ void register_admin_routes(httplib::Server& svr) {
             return;
         }
         res.set_content("{\"ok\":true}", "application/json");
+    });
+
+    svr.Put(R"(/api/admin/users/(\d+)/ban)", [](const httplib::Request& req, httplib::Response& res) {
+        if (!check_admin(req, res)) return;
+        int uid = std::stoi(req.matches[1]);
+        bool banned = extract_json_bool(req.body, "is_banned");
+
+        auto db = g_db->acquire();
+        db->query("UPDATE users SET is_banned=" + std::string(banned ? "1" : "0") + " WHERE id=" + std::to_string(uid));
+        if (db->affected_rows() == 0) {
+            res.status = 404;
+            res.set_content("{\"error\":\"用户不存在\"}", "application/json");
+            return;
+        }
+        if (banned) {
+            db->query("DELETE FROM sessions WHERE user_id=" + std::to_string(uid));
+        }
+        res.set_content("{\"ok\":true}", "application/json");
+    });
+
+    svr.Put(R"(/api/admin/users/(\d+)/password)", [](const httplib::Request& req, httplib::Response& res) {
+        if (!check_admin(req, res)) return;
+        int uid = std::stoi(req.matches[1]);
+        std::string password = extract_json_string(req.body, "password");
+        if (password.size() < 8) {
+            res.status = 400;
+            res.set_content("{\"error\":\"密码至少 8 位\"}", "application/json");
+            return;
+        }
+
+        auto db = g_db->acquire();
+        std::string hash = hash_password(password);
+        db->query("UPDATE users SET password_hash='" + db->escape(hash) + "' WHERE id=" + std::to_string(uid));
+        if (db->affected_rows() == 0) {
+            res.status = 404;
+            res.set_content("{\"error\":\"用户不存在\"}", "application/json");
+            return;
+        }
+        db->query("DELETE FROM sessions WHERE user_id=" + std::to_string(uid));
+        res.set_content("{\"ok\":true}", "application/json");
+    });
+
+    svr.Get("/api/admin/discussions", [](const httplib::Request& req, httplib::Response& res) {
+        if (!check_admin(req, res)) return;
+
+        int page = 1;
+        int per_page = 20;
+        std::string search;
+        if (req.has_param("page")) try { page = std::stoi(req.get_param_value("page")); } catch (...) {}
+        if (req.has_param("search")) search = req.get_param_value("search");
+        int offset = (page - 1) * per_page;
+
+        auto db = g_db->acquire();
+        std::string where;
+        if (!search.empty()) {
+            std::string esc = db->escape(search);
+            where = " WHERE d.content LIKE '%" + esc + "%' OR u.username LIKE '%" + esc + "%'";
+        }
+
+        db->query("SELECT COUNT(*) FROM discussions d JOIN users u ON d.user_id=u.id" + where);
+        int total = 0;
+        MYSQL_RES* cr = db->store_result();
+        if (cr) { MYSQL_ROW row = mysql_fetch_row(cr); if (row && row[0]) total = std::stoi(row[0]); mysql_free_result(cr); }
+
+        std::string sql =
+            "SELECT d.id, d.user_id, u.username, d.content, d.like_count, d.created_at, "
+            "(SELECT COUNT(*) FROM discussion_replies WHERE discussion_id=d.id) AS reply_count "
+            "FROM discussions d JOIN users u ON d.user_id=u.id" + where +
+            " ORDER BY d.id DESC LIMIT " + std::to_string(per_page) + " OFFSET " + std::to_string(offset);
+        db->query(sql);
+        MYSQL_RES* result = db->store_result();
+
+        std::ostringstream json;
+        json << "{\"total\":" << total << ",\"discussions\":[";
+        bool first = true;
+        MYSQL_ROW row;
+        if (result) {
+            while ((row = mysql_fetch_row(result))) {
+                if (!first) json << ",";
+                first = false;
+                json << "{\"id\":" << (row[0] ? row[0] : "0")
+                     << ",\"user_id\":" << (row[1] ? row[1] : "0")
+                     << ",\"username\":\"" << json_escape(row[2] ? row[2] : "") << "\""
+                     << ",\"content\":\"" << json_escape(row[3] ? row[3] : "") << "\""
+                     << ",\"like_count\":" << (row[4] ? row[4] : "0")
+                     << ",\"created_at\":\"" << (row[5] ? row[5] : "") << "\""
+                     << ",\"reply_count\":" << (row[6] ? row[6] : "0")
+                     << "}";
+            }
+            mysql_free_result(result);
+        }
+        json << "]}";
+        res.set_content(json.str(), "application/json");
+    });
+
+    svr.Get(R"(/api/admin/discussions/(\d+)/replies)", [](const httplib::Request& req, httplib::Response& res) {
+        if (!check_admin(req, res)) return;
+        int did = std::stoi(req.matches[1]);
+
+        auto db = g_db->acquire();
+        db->query(
+            "SELECT r.id, r.user_id, u.username, r.content, r.parent_reply_id, r.like_count, r.created_at "
+            "FROM discussion_replies r JOIN users u ON r.user_id=u.id "
+            "WHERE r.discussion_id=" + std::to_string(did) + " ORDER BY r.id ASC");
+        MYSQL_RES* result = db->store_result();
+
+        std::ostringstream json;
+        json << "[";
+        bool first = true;
+        MYSQL_ROW row;
+        if (result) {
+            while ((row = mysql_fetch_row(result))) {
+                if (!first) json << ",";
+                first = false;
+                json << "{\"id\":" << (row[0] ? row[0] : "0")
+                     << ",\"user_id\":" << (row[1] ? row[1] : "0")
+                     << ",\"username\":\"" << json_escape(row[2] ? row[2] : "") << "\""
+                     << ",\"content\":\"" << json_escape(row[3] ? row[3] : "") << "\""
+                     << ",\"parent_reply_id\":" << (row[4] ? row[4] : "null")
+                     << ",\"like_count\":" << (row[5] ? row[5] : "0")
+                     << ",\"created_at\":\"" << (row[6] ? row[6] : "") << "\"}";
+            }
+            mysql_free_result(result);
+        }
+        json << "]";
+        res.set_content(json.str(), "application/json");
     });
 }

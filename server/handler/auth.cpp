@@ -133,7 +133,7 @@ void register_auth_routes(httplib::Server& svr) {
 
             auto db = g_db->acquire();
             std::string escaped = db->escape(username);
-            db->query("SELECT id, username, password_hash, is_admin FROM users WHERE username='" + escaped + "'");
+            db->query("SELECT id, username, password_hash, is_admin, is_banned FROM users WHERE username='" + escaped + "'");
             MYSQL_RES* result = db->store_result();
             if (!result || mysql_num_rows(result) == 0) {
                 if (result) mysql_free_result(result);
@@ -146,8 +146,15 @@ void register_auth_routes(httplib::Server& svr) {
             int user_id = std::stoi(row[0]);
             std::string hash = row[2] ? row[2] : "";
             bool is_admin = row[3] ? std::stoi(row[3]) : 0;
+            bool is_banned = row[4] ? std::stoi(row[4]) : 0;
             std::string db_username = row[1] ? row[1] : "";
             mysql_free_result(result);
+
+            if (is_banned) {
+                res.status = 403;
+                res.set_content("{\"error\":\"账号已被封禁\"}", "application/json");
+                return;
+            }
 
             if (!verify_password(password, hash)) {
                 res.status = 401;

@@ -7,46 +7,95 @@ async function renderAdminQuestionEdit(main) {
     const qid = main.dataset.questionId;
     const q = await API.getAdminQuestion(qid);
     const testCases = await API.getTestCases(qid);
+    let currentTestCases = testCases;
+    let savedReferenceCode = q.reference_code || '';
+    let outputsVerified = true;
 
-    main.innerHTML = `<div class="page-container" style="max-width:1000px;">
+    main.innerHTML = `<div class="page-container admin-edit-page" style="max-width:1100px;">
         <a href="#/admin/questions" class="back-link">← 返回题目管理</a>
-        <h2>编辑题目: ${escapeHtml(q.title)}</h2>
-        <form id="question-form">
-            <div class="form-group"><label>标题</label><input type="text" id="q-title" value="${escapeHtml(q.title)}" required></div>
-            <div class="form-group"><label>描述</label><textarea id="q-desc" rows="5" required>${escapeHtml(q.description)}</textarea></div>
-            <div class="form-group"><label>输入格式</label><textarea id="q-ifmt" rows="2">${escapeHtml(q.input_format || '')}</textarea></div>
-            <div class="form-group"><label>输出格式</label><textarea id="q-ofmt" rows="2">${escapeHtml(q.output_format || '')}</textarea></div>
-            <div class="form-group"><label>样例输入</label><textarea id="q-sin" rows="3">${escapeHtml(q.sample_input || '')}</textarea></div>
-            <div class="form-group"><label>样例输出</label><textarea id="q-sout" rows="3">${escapeHtml(q.sample_output || '')}</textarea></div>
-            <div class="form-row">
-                <div class="form-group"><label>时间限制(秒)</label><input type="number" id="q-tl" value="${q.time_limit}" min="0.1" step="0.1"></div>
-                <div class="form-group"><label>内存限制(MB)</label><input type="number" id="q-ml" value="${q.memory_limit}" min="1"></div>
-            </div>
-            <div class="form-group"><label><input type="checkbox" id="q-vis" ${q.is_visible ? 'checked' : ''}> 可见</label></div>
-            <div id="form-error" class="error" style="display:none;"></div>
-            <button type="submit" class="btn-primary">保存修改</button>
-        </form>
-
-        <h3>参考标程（自动生成期望输出）</h3>
-        <div class="form-group">
-            <label>标程 C++ 代码</label>
-            <textarea id="ref-code" rows="6" style="font-family:monospace;font-size:0.85em;" placeholder="粘贴 C++ 标程代码，点击下方按钮自动编译运行生成每组输入的期望输出..."></textarea>
+        <div class="admin-edit-header">
+            <h2>编辑题目 #${qid}: ${escapeHtml(q.title)}</h2>
+            <button type="button" class="btn-secondary" id="preview-problem-btn" style="width:auto;padding:8px 18px;">预览做题页</button>
         </div>
-        <button id="gen-outputs-btn" class="btn-secondary" style="margin-bottom:16px;">编译运行，生成期望输出</button>
-        <div id="gen-result" style="margin-bottom:12px;display:none;"></div>
 
-        <h3>测试用例管理</h3>
-        <div id="testcase-list"></div>
-        <h4>添加测试用例</h4>
-        <form id="tc-form">
-            <div class="form-group"><label>输入数据</label><textarea id="tc-input" rows="3" required></textarea></div>
-            <div class="form-group"><label>期望输出</label><textarea id="tc-output" rows="3" required></textarea></div>
-            <div class="form-group"><label>顺序</label><input type="number" id="tc-order" value="0" min="0"></div>
-            <button type="submit" class="btn-secondary">添加</button>
-        </form>
+        <section class="admin-section">
+            <h3>基本信息</h3>
+            <form id="question-form">
+                <div class="form-group"><label>标题</label><input type="text" id="q-title" value="${escapeHtml(q.title)}" required></div>
+                <div class="form-row">
+                    <div class="form-group"><label>难度</label>
+                        <select id="q-diff" required>
+                            <option value="简单">简单</option>
+                            <option value="中等">中等</option>
+                            <option value="困难">困难</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>时间限制(秒)</label><input type="number" id="q-tl" value="${q.time_limit}" min="0.1" step="0.1"></div>
+                    <div class="form-group"><label>内存限制(MB)</label><input type="number" id="q-ml" value="${q.memory_limit}" min="1"></div>
+                </div>
+                <div class="form-group"><label>描述（Markdown）</label>
+                    <div class="md-edit-row">
+                        <textarea id="q-desc" rows="8" required>${escapeHtml(q.description)}</textarea>
+                        <div id="q-desc-preview" class="md-preview-panel"></div>
+                    </div>
+                </div>
+                <div class="form-group"><label>输入格式</label><textarea id="q-ifmt" rows="2">${escapeHtml(q.input_format || '')}</textarea></div>
+                <div class="form-group"><label>输出格式</label><textarea id="q-ofmt" rows="2">${escapeHtml(q.output_format || '')}</textarea></div>
+                <div class="form-group"><label>样例输入</label><textarea id="q-sin" rows="3">${escapeHtml(q.sample_input || '')}</textarea></div>
+                <div class="form-group"><label>样例输出</label><textarea id="q-sout" rows="3">${escapeHtml(q.sample_output || '')}</textarea></div>
+                <div class="form-group"><label><input type="checkbox" id="q-vis" ${q.is_visible ? 'checked' : ''}> 可见（发布）</label></div>
+                <div id="form-error" class="error" style="display:none;"></div>
+                <button type="submit" class="btn-primary" style="width:auto;padding:8px 24px;">保存题目信息</button>
+            </form>
+        </section>
+
+        <section class="admin-section">
+            <h3>标程代码</h3>
+            <div id="ref-stale-warning" class="admin-warning" style="display:none;">标程已修改，期望输出可能过期，请重新「编译运行并校验」。</div>
+            <div id="ref-code-editor" style="height:280px;border-radius:8px;overflow:hidden;"></div>
+            <button id="gen-outputs-btn" class="btn-secondary" style="margin-top:12px;">编译运行，生成期望输出并校验</button>
+            <div id="gen-result" style="margin-top:10px;display:none;"></div>
+        </section>
+
+        <section class="admin-section">
+            <h3>测试用例管理</h3>
+            <div id="testcase-list"></div>
+            <h4>添加测试用例</h4>
+            <form id="tc-form">
+                <div class="form-group"><label>输入数据</label><textarea id="tc-input" rows="3" required></textarea></div>
+                <div class="form-group"><label>期望输出</label><textarea id="tc-output" rows="3" required></textarea></div>
+                <div class="form-group"><label>顺序</label><input type="number" id="tc-order" value="0" min="0"></div>
+                <button type="submit" class="btn-secondary">添加</button>
+            </form>
+        </section>
     </div>`;
 
-    let currentTestCases = testCases;
+    $('#q-diff').value = q.difficulty || '简单';
+    bindMarkdownPreview('q-desc', 'q-desc-preview');
+    const refEditor = initAdminAce('ref-code-editor', savedReferenceCode);
+
+    function collectQuestionData() {
+        return {
+            title: $('#q-title').value.trim(),
+            description: $('#q-desc').value.trim(),
+            difficulty: $('#q-diff').value,
+            input_format: $('#q-ifmt').value.trim(),
+            output_format: $('#q-ofmt').value.trim(),
+            sample_input: $('#q-sin').value.trim(),
+            sample_output: $('#q-sout').value.trim(),
+            time_limit: parseFloat($('#q-tl').value) || 1,
+            memory_limit: parseInt($('#q-ml').value) || 256,
+            is_visible: $('#q-vis').checked,
+            reference_code: refEditor.getValue()
+        };
+    }
+
+    function updateStaleWarning() {
+        const stale = refEditor.getValue() !== savedReferenceCode;
+        $('#ref-stale-warning').style.display = stale ? 'block' : 'none';
+        if (stale) outputsVerified = false;
+    }
+    refEditor.session.on('change', updateStaleWarning);
 
     function renderTestCases(tcs) {
         currentTestCases = tcs;
@@ -58,8 +107,12 @@ async function renderAdminQuestionEdit(main) {
                 html += `<tr id="tc-row-${tc.id}">
                     <td>${tc.id}</td>
                     <td class="tc-cell"><pre class="tc-preview" id="tc-input-preview-${tc.id}">${escapeHtml(tc.input_data.substring(0, 100))}${tc.input_data.length > 100 ? '...' : ''}</pre>
+                        <button type="button" class="btn-sm tc-expand-btn" data-title="输入 #${tc.id}" data-content-id="tc-input-full-${tc.id}">展开</button>
+                        <textarea id="tc-input-full-${tc.id}" style="display:none;">${escapeHtml(tc.input_data)}</textarea>
                         <textarea id="tc-input-edit-${tc.id}" class="tc-edit-input" style="display:none;width:100%;min-height:60px;font-family:monospace;font-size:0.82em;">${escapeHtml(tc.input_data)}</textarea></td>
                     <td class="tc-cell"><pre class="tc-preview" id="tc-output-preview-${tc.id}">${escapeHtml(tc.expected_output.substring(0, 100))}${tc.expected_output.length > 100 ? '...' : ''}</pre>
+                        <button type="button" class="btn-sm tc-expand-btn" data-title="期望输出 #${tc.id}" data-content-id="tc-output-full-${tc.id}">展开</button>
+                        <textarea id="tc-output-full-${tc.id}" style="display:none;">${escapeHtml(tc.expected_output)}</textarea>
                         <textarea id="tc-output-edit-${tc.id}" class="tc-edit-input" style="display:none;width:100%;min-height:60px;font-family:monospace;font-size:0.82em;">${escapeHtml(tc.expected_output)}</textarea></td>
                     <td><span id="tc-order-view-${tc.id}">${tc.order_index}</span>
                         <input type="number" id="tc-order-edit-${tc.id}" value="${tc.order_index}" min="0" style="display:none;width:60px;"></td>
@@ -75,61 +128,41 @@ async function renderAdminQuestionEdit(main) {
         html += '</tbody></table>';
         $('#testcase-list').innerHTML = html;
 
-        // Edit button
-        $$('.edit-tc-btn').forEach(btn => {
+        $$('.tc-expand-btn').forEach(btn => {
             btn.addEventListener('click', function() {
-                const id = this.dataset.id;
-                toggleEditMode(id, true);
+                const hidden = document.getElementById(this.dataset.contentId);
+                showTcExpandModal(this.dataset.title, hidden ? hidden.value : '');
             });
         });
-
-        // Cancel button
-        $$('.cancel-tc-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const id = this.dataset.id;
-                const tc = currentTestCases.find(t => t.id == id);
-                if (tc) {
-                    $(`#tc-input-edit-${id}`).value = tc.input_data;
-                    $(`#tc-output-edit-${id}`).value = tc.expected_output;
-                    $(`#tc-order-edit-${id}`).value = tc.order_index;
-                }
-                toggleEditMode(id, false);
-            });
-        });
-
-        // Save button
-        $$('.save-tc-btn').forEach(btn => {
-            btn.addEventListener('click', async function() {
-                const id = this.dataset.id;
-                const data = {
+        $$('.edit-tc-btn').forEach(btn => btn.addEventListener('click', function() { toggleEditMode(this.dataset.id, true); }));
+        $$('.cancel-tc-btn').forEach(btn => btn.addEventListener('click', function() {
+            const id = this.dataset.id;
+            const tc = currentTestCases.find(t => t.id == id);
+            if (tc) {
+                $(`#tc-input-edit-${id}`).value = tc.input_data;
+                $(`#tc-output-edit-${id}`).value = tc.expected_output;
+                $(`#tc-order-edit-${id}`).value = tc.order_index;
+            }
+            toggleEditMode(id, false);
+        }));
+        $$('.save-tc-btn').forEach(btn => btn.addEventListener('click', async function() {
+            const id = this.dataset.id;
+            try {
+                await API.updateTestCase(qid, id, {
                     input_data: $(`#tc-input-edit-${id}`).value,
                     expected_output: $(`#tc-output-edit-${id}`).value,
                     order_index: parseInt($(`#tc-order-edit-${id}`).value) || 0
-                };
-                try {
-                    await API.updateTestCase(qid, id, data);
-                    // Refresh
-                    const updated = await API.getTestCases(qid);
-                    renderTestCases(updated);
-                } catch(e) {
-                    alert('保存失败: ' + e.message);
-                }
-            });
-        });
-
-        // Delete button
-        $$('.delete-tc-btn').forEach(btn => {
-            btn.addEventListener('click', async function() {
-                if (!confirm('确定删除此测试用例？')) return;
-                try {
-                    await API.deleteTestCase(qid, this.dataset.id);
-                    const updated = await API.getTestCases(qid);
-                    renderTestCases(updated);
-                } catch(e) {
-                    alert('删除失败: ' + e.message);
-                }
-            });
-        });
+                });
+                renderTestCases(await API.getTestCases(qid));
+            } catch (e) { showToast('保存失败: ' + e.message, 'error'); }
+        }));
+        $$('.delete-tc-btn').forEach(btn => btn.addEventListener('click', async function() {
+            if (!(await showConfirm('确定删除此测试用例？', { danger: true }))) return;
+            try {
+                await API.deleteTestCase(qid, this.dataset.id);
+                renderTestCases(await API.getTestCases(qid));
+            } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
+        }));
     }
 
     function toggleEditMode(id, editing) {
@@ -139,6 +172,8 @@ async function renderAdminQuestionEdit(main) {
         $(`#tc-output-edit-${id}`).style.display = editing ? '' : 'none';
         $(`#tc-order-view-${id}`).style.display = editing ? 'none' : '';
         $(`#tc-order-edit-${id}`).style.display = editing ? '' : 'none';
+        const row = $(`#tc-row-${id}`);
+        if (row) row.querySelectorAll('.tc-expand-btn').forEach(b => b.style.display = editing ? 'none' : '');
         $(`.edit-tc-btn[data-id="${id}"]`).style.display = editing ? 'none' : '';
         $(`.save-tc-btn[data-id="${id}"]`).style.display = editing ? '' : 'none';
         $(`.cancel-tc-btn[data-id="${id}"]`).style.display = editing ? '' : 'none';
@@ -146,28 +181,29 @@ async function renderAdminQuestionEdit(main) {
 
     renderTestCases(testCases);
 
-    // Reference code generation
+    $('#preview-problem-btn').addEventListener('click', () => window.open('#/problems/' + qid, '_blank'));
+
     $('#gen-outputs-btn').addEventListener('click', async function() {
-        const code = $('#ref-code').value.trim();
-        if (!code) { alert('请先粘贴标程代码'); return; }
+        const code = refEditor.getValue().trim();
+        if (!code) { showToast('请先填写标程代码', 'error'); return; }
+        if (!currentTestCases.length) { showToast('请先添加测试用例', 'error'); return; }
 
-        // Collect all test case inputs
-        let allInputs = '';
-        currentTestCases.forEach(tc => {
-            if (allInputs) allInputs += '|||';
-            allInputs += tc.input_data;
-        });
-        if (!allInputs) { alert('请先添加测试用例的输入数据'); return; }
-
+        let allInputs = currentTestCases.map(tc => tc.input_data).join('|||');
         const genResult = $('#gen-result');
         genResult.style.display = '';
         genResult.textContent = '编译运行中...';
-        genResult.style.color = '#fdbb2d';
-        $('#gen-outputs-btn').disabled = true;
+        genResult.style.color = '#d4af37';
+        this.disabled = true;
 
         try {
+            const saveData = collectQuestionData();
+            if (saveData.is_visible && !currentTestCases.length) saveData.is_visible = false;
+            await API.updateQuestion(qid, saveData);
+            savedReferenceCode = code;
+            updateStaleWarning();
+
             const result = await API.generateOutputs(code, allInputs);
-            $('#gen-outputs-btn').disabled = false;
+            this.disabled = false;
 
             if (result.compile_error) {
                 genResult.textContent = '编译错误: ' + result.compile_error;
@@ -175,83 +211,76 @@ async function renderAdminQuestionEdit(main) {
                 return;
             }
 
-            if (result.outputs && result.outputs.length === currentTestCases.length) {
-                // Auto-fill expected outputs
-                for (let i = 0; i < currentTestCases.length; i++) {
-                    const tc = currentTestCases[i];
-                    const newOutput = result.outputs[i];
-                    // Update via API
-                    try {
-                        await API.updateTestCase(qid, tc.id, {
-                            input_data: tc.input_data,
-                            expected_output: newOutput,
-                            order_index: tc.order_index
-                        });
-                    } catch(e) {
-                        console.error('Failed to update test case ' + tc.id, e);
-                    }
-                }
-                genResult.textContent = '成功生成 ' + result.outputs.length + ' 组期望输出并已自动填充！';
-                genResult.style.color = '#52c41a';
-                // Refresh test cases
-                const updated = await API.getTestCases(qid);
-                renderTestCases(updated);
-            } else {
-                genResult.textContent = '生成完成，但输出数量 (' + (result.outputs ? result.outputs.length : 0) + ') 与测试用例数 (' + currentTestCases.length + ') 不匹配';
+            if (!result.outputs || result.outputs.length !== currentTestCases.length) {
+                genResult.textContent = '输出数量与测试用例不匹配';
                 genResult.style.color = '#ff6b6d';
+                return;
             }
-        } catch(e) {
-            $('#gen-outputs-btn').disabled = false;
+
+            let allAc = true;
+            for (let i = 0; i < currentTestCases.length; i++) {
+                const tc = currentTestCases[i];
+                const status = (result.statuses && result.statuses[i]) || 'AC';
+                if (status !== 'AC') allAc = false;
+                await API.updateTestCase(qid, tc.id, {
+                    input_data: tc.input_data,
+                    expected_output: result.outputs[i],
+                    order_index: tc.order_index
+                });
+            }
+
+            outputsVerified = allAc;
+            renderTestCases(await API.getTestCases(qid));
+            genResult.textContent = allAc
+                ? '已生成 ' + result.outputs.length + ' 组期望输出，校验全部 AC。'
+                : '已生成输出，但部分用例校验未通过，请检查标程。';
+            genResult.style.color = allAc ? '#52c41a' : '#ff6b6d';
+        } catch (e) {
+            this.disabled = false;
             genResult.textContent = '生成失败: ' + e.message;
             genResult.style.color = '#ff6b6d';
         }
     });
 
-    // Save question form
     $('#question-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const errorEl = $('#form-error');
         errorEl.style.display = 'none';
-        const data = {
-            title: $('#q-title').value.trim(),
-            description: $('#q-desc').value.trim(),
-            input_format: $('#q-ifmt').value.trim(),
-            output_format: $('#q-ofmt').value.trim(),
-            sample_input: $('#q-sin').value.trim(),
-            sample_output: $('#q-sout').value.trim(),
-            time_limit: parseInt($('#q-tl').value) || 1,
-            memory_limit: parseInt($('#q-ml').value) || 256,
-            is_visible: $('#q-vis').checked
-        };
-        if (!data.title || !data.description) {
-            errorEl.textContent = '标题和描述为必填';
+        const data = collectQuestionData();
+        if (!data.title || !data.description || !data.difficulty) {
+            errorEl.textContent = '标题、描述、难度为必填';
+            errorEl.style.display = '';
+            return;
+        }
+        if (data.is_visible && (currentTestCases.length === 0 || !data.reference_code.trim())) {
+            errorEl.textContent = '发布需要至少一个测试用例和已保存的标程代码';
             errorEl.style.display = '';
             return;
         }
         try {
             await API.updateQuestion(qid, data);
-            window.location.hash = '#/admin/questions';
-        } catch(err) {
+            savedReferenceCode = data.reference_code;
+            updateStaleWarning();
+            showToast('题目信息已保存', 'success');
+        } catch (err) {
             errorEl.textContent = err.message;
             errorEl.style.display = '';
         }
     });
 
-    // Add test case form
     $('#tc-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const input_data = $('#tc-input').value.trim();
         const expected_output = $('#tc-output').value.trim();
         const order_index = parseInt($('#tc-order').value) || 0;
-        if (!input_data || !expected_output) { alert('请填写输入和期望输出'); return; }
+        if (!input_data || !expected_output) { showToast('请填写输入和期望输出', 'error'); return; }
         try {
             await API.createTestCase(qid, { input_data, expected_output, order_index });
-            const updated = await API.getTestCases(qid);
-            renderTestCases(updated);
+            renderTestCases(await API.getTestCases(qid));
             $('#tc-input').value = '';
             $('#tc-output').value = '';
-        } catch(err) {
-            alert('添加失败: ' + err.message);
+        } catch (err) {
+            showToast('添加失败: ' + err.message, 'error');
         }
     });
 }

@@ -106,12 +106,9 @@ void register_discussion_routes(httplib::Server& svr) {
              << ",\"liked_by_me\":" << (drow[7] && std::string(drow[7]) == "1" ? "true" : "false");
 
         std::vector<std::string> replyJsons;
-        std::map<int, std::vector<int>> children;
-        std::vector<std::pair<int, std::string>> flatReplies;
         MYSQL_ROW rrow;
         while ((rrow = mysql_fetch_row(rres))) {
             int rid = rrow[0] ? std::stoi(rrow[0]) : 0;
-            int parent = rrow[5] ? std::stoi(rrow[5]) : 0;
             std::ostringstream rj;
             rj << "{"
                << "\"id\":" << rid
@@ -124,29 +121,13 @@ void register_discussion_routes(httplib::Server& svr) {
                << ",\"created_at\":\"" << (rrow[7] ? rrow[7] : "") << "\""
                << ",\"liked_by_me\":" << (rrow[8] && std::string(rrow[8]) == "1" ? "true" : "false")
                << "}";
-            flatReplies.push_back({rid, rj.str()});
-            if (parent > 0) children[parent].push_back(rid);
+            replyJsons.push_back(rj.str());
         }
 
         json << ",\"replies\":[";
-        bool firstReply = true;
-        for (auto& fr : flatReplies) {
-            int rid = fr.first;
-            bool isTopLevel = true;
-            for (auto& c : children) {
-                for (int childId : c.second) {
-                    if (childId == rid) { isTopLevel = false; break; }
-                }
-                if (!isTopLevel) break;
-            }
-            std::map<int, std::string> rmap;
-            for (auto& f : flatReplies) rmap[f.first] = f.second;
-            for (auto& f : flatReplies) {
-                if (f.first == rid && isTopLevel) {
-                    { if (!firstReply) json << ","; } firstReply = false;
-                    json << f.second;
-                }
-            }
+        for (size_t i = 0; i < replyJsons.size(); i++) {
+            if (i > 0) json << ",";
+            json << replyJsons[i];
         }
         json << "]}";
 

@@ -46,6 +46,11 @@ DbPool::DbPool(const std::string& host, int port, const std::string& user,
             mysql_close(conn);
             throw std::runtime_error("MySQL connect failed: " + err);
         }
+        if (mysql_query(conn, "SET time_zone = '+08:00'") != 0) {
+            std::string err = mysql_error(conn);
+            mysql_close(conn);
+            throw std::runtime_error("MySQL set time_zone failed: " + err);
+        }
         pool_.push(conn);
     }
 }

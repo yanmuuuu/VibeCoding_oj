@@ -22,7 +22,7 @@ AuthUser authenticate(const httplib::Request& req) {
     std::string token = extract_token(req);
     if (token.empty()) return u;
     auto db = g_db->acquire();
-    std::string sql = "SELECT u.id, u.username, u.is_admin FROM sessions s "
+    std::string sql = "SELECT u.id, u.username, u.is_admin, u.is_banned FROM sessions s "
                       "JOIN users u ON s.user_id = u.id WHERE s.token = '" +
                       db->escape(token) + "'";
     db->query(sql);
@@ -30,6 +30,10 @@ AuthUser authenticate(const httplib::Request& req) {
     if (!res) return u;
     MYSQL_ROW row = mysql_fetch_row(res);
     if (row) {
+        if (row[3] && std::stoi(row[3]) != 0) {
+            mysql_free_result(res);
+            return u;
+        }
         u.id = std::stoi(row[0]);
         u.username = row[1] ? row[1] : "";
         u.is_admin = row[2] ? (std::stoi(row[2]) != 0) : false;
