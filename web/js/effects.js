@@ -132,6 +132,7 @@
             settingRow.style.display = 'none';
             toggleEl.classList.remove('on');
         }
+        updateDeleteBgBtn();
     }
 
     applyBlur(blurPx);
@@ -147,6 +148,72 @@
 
     window.setBackgroundBlur = function(px) {
         applyBlur(px);
+    };
+
+    window.deleteCustomBackground = function() {
+        return fetch('/api/backgrounds/delete', {
+            method: 'POST',
+            credentials: 'same-origin'
+        }).then(function(r) {
+            if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || '删除失败'); });
+            return r.json();
+        }).then(function() {
+            useCustomBg = null;
+            localStorage.setItem(USE_CUSTOM_KEY, '');
+            cachedCustomBgUrl = null;
+            localStorage.setItem('vibeoj_custom_bg_url', '');
+            if (bgMode === 'album') {
+                fetchSystemBackgrounds();
+            }
+            updateUseCustomBgToggle();
+            return true;
+        });
+    };
+
+    window.resetAllBackgrounds = function() {
+        var promises = [];
+        if (cachedCustomBgUrl) {
+            promises.push(fetch('/api/backgrounds/delete', {
+                method: 'POST',
+                credentials: 'same-origin'
+            }).then(function(r) {
+                if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || '删除失败'); });
+                return r.json();
+            }).catch(function() {}));
+        }
+        return Promise.all(promises).then(function() {
+            useCustomBg = null;
+            localStorage.setItem(USE_CUSTOM_KEY, '');
+            cachedCustomBgUrl = null;
+            localStorage.setItem('vibeoj_custom_bg_url', '');
+
+            bgMode = 'album';
+            localStorage.setItem(MODE_KEY, 'album');
+            applyMode('album');
+
+            applyBlur(0);
+            var blurSlider = document.getElementById('blur-slider');
+            var blurLabel = document.getElementById('blur-value-label');
+            if (blurSlider) blurSlider.value = 0;
+            if (blurLabel) blurLabel.textContent = '0px';
+
+            var toggleEff = document.getElementById('toggle-effects');
+            if (toggleEff) toggleEff.classList.add('on');
+
+            fetchSystemBackgrounds();
+            updateUseCustomBgToggle();
+            return true;
+        });
+    };
+
+    function updateDeleteBgBtn() {
+        var btn = document.getElementById('delete-bg-btn');
+        if (!btn) return;
+        btn.style.display = cachedCustomBgUrl ? 'inline-block' : 'none';
+    }
+
+    window.refreshDeleteBgBtn = function() {
+        updateDeleteBgBtn();
     };
 
     window.uploadBackground = function(file) {

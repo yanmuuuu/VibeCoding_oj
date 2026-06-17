@@ -59,3 +59,12 @@ CREATE TABLE submissions (
     FOREIGN KEY (user_id)     REFERENCES users(id)     ON DELETE CASCADE,
     FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
 );
+
+CREATE TABLE announcements (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    title           VARCHAR(256) NOT NULL,
+    content         TEXT         NOT NULL,
+    is_pinned       TINYINT(1)   NOT NULL DEFAULT 0,
+    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);

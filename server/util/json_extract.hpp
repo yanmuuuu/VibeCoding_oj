@@ -93,6 +93,19 @@ inline bool is_special_char(char c) {
     return false;
 }
 
+inline bool extract_json_bool(const std::string& body, const std::string& key) {
+    std::string key_pattern = "\"" + key + "\"";
+    size_t pos = body.find(key_pattern);
+    if (pos == std::string::npos) return false;
+    pos += key_pattern.size();
+    while (pos < body.size() && std::isspace(body[pos])) pos++;
+    if (pos >= body.size() || body[pos] != ':') return false;
+    pos++;
+    while (pos < body.size() && std::isspace(body[pos])) pos++;
+    if (pos + 4 <= body.size() && body.substr(pos, 4) == "true") return true;
+    return false;
+}
+
 inline ValidationResult validate_password(const std::string& username, const std::string& password) {
     ValidationResult r;
 

@@ -1,7 +1,7 @@
 async function renderLogin(main) {
     main.innerHTML = `
         <div class="auth-container">
-            <h1>VibeOJ</h1>
+            <h1 class="auth-title">${brandMascotHtml()} MioOJ</h1>
             <div class="auth-box">
                 <div class="form-group">
                     <label>用户名</label>
@@ -13,7 +13,7 @@ async function renderLogin(main) {
                 </div>
                 <div id="login-error" class="error" style="display:none;"></div>
                 <button id="login-btn" class="btn-primary">登 录</button>
-                <p class="auth-link">没有账号？<a href="#/register">去注册</a></p>
+                <p class="auth-link">没有账号？<a href="#/register">去注册</a> · <a href="#/announcements">查看公告</a></p>
             </div>
         </div>`;
 

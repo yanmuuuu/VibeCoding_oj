@@ -1,10 +1,10 @@
-# SPEC.md — VibeOJ 仿 LeetCode OJ 系统
+# SPEC.md — MioOJ 仿 LeetCode OJ 系统
 
 ## 1. 项目概述
 
 | 属性 | 值 |
 |---|---|
-| **项目名称** | VibeOJ |
+| **项目名称** | MioOJ（用户可见品牌名；后端二进制/数据库等内部标识仍为 `vibeoj`） |
 | **定位** | 个人学习项目 |
 | **模式** | ACM（stdin/stdout），仅 C++ |
 | **前端** | 原生 HTML + CSS + JS（SPA + Hash 路由）+ ACE Editor (CDN) |
@@ -30,7 +30,7 @@
 
 ### 2.2 题目浏览
 - 题目列表页：展示所有题目（编号、标题、难度）
-- 搜索筛选：支持按标题关键词搜索 + 按难度下拉筛选（客户端实时过滤）
+- 搜索筛选：支持按**题目编号**（`1`、`#3`）、**标题关键词**、**难度文字**搜索 + 难度下拉筛选（客户端实时过滤，可组合）
 - 题目详情页：描述、输入/输出/样例、时间限制、内存限制
 
 ### 2.3 代码提交与判题
@@ -44,8 +44,16 @@
 - 统计语义："通过" = 有 AC 记录的题目数，"尝试" = 有提交但无 AC 的题目数（二者互斥不重复计数）
 
 ### 2.5 后台管理（管理员）
-- 题目 CRUD（创建、编辑、删除）
-- 测试用例管理（每个题目下增删测试点，input/expected_output 分别存储）
+- Tab 导航布局：统计 | 题目管理 | 用户管理 | 公告管理
+- **统计仪表盘**：总用户数、总题目数、总提交数
+- **题目管理**：列表（含可见/隐藏题目）、批量操作（全选/隐藏/显示/删除）、创建/编辑
+- **录题/编辑题目标程**：录入 C++ 标程代码，系统自动编译运行生成每组输入的期望输出（`POST /api/admin/reference/generate`）
+- **测试用例管理**：增删改查，支持行内编辑（input/expected_output/order_index）
+- **用户管理**：用户列表（分页+搜索）、删除用户、提升/取消管理员权限
+- **系统公告**：管理员可发布/编辑/删除公告，全站可见（`#/announcements` 公共页面）
+- **管理员导航栏**：隐藏「我的」链接，显示：题目 | 公告 | 管理 | 退出
+- **普通用户导航栏**：题目 | 公告 | 我的 | 退出
+- **未登录导航栏**：公告 | 登录（公告为公开页）
 - 管理页需要管理员权限
 
 ### 2.6 通用
@@ -179,15 +187,27 @@ CREATE TABLE submissions (
     question_id     INT          NOT NULL,
     code            TEXT         NOT NULL,
     status          ENUM('PENDING','COMPILING','RUNNING','AC','WA','TLE','MLE','RE','CE','SE') NOT NULL DEFAULT 'PENDING',
-    compile_error   TEXT,                              -- CE 时的编译器输出
-    total_time      INT,                               -- ms（最慢测试点）
-    total_memory    INT,                               -- KB（最大内存测试点）
-    passed_count    INT,                               -- 通过测试点数
-    total_count     INT,                               -- 总测试点数
-    detail_json     JSON,                              -- 每题点结果：[{index,status,time_ms,memory_kb}]（不存储输入/输出，防泄题）
+    compile_error   TEXT,
+    total_time      INT,
+    total_memory    INT,
+    passed_count    INT,
+    total_count     INT,
+    detail_json     JSON,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id)     REFERENCES users(id)     ON DELETE CASCADE,
     FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+);
+```
+
+### 5.6 announcements
+```sql
+CREATE TABLE announcements (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    title           VARCHAR(256) NOT NULL,
+    content         TEXT         NOT NULL,
+    is_pinned       TINYINT(1)   NOT NULL DEFAULT 0,
+    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 ```
 
@@ -233,20 +253,37 @@ CREATE TABLE submissions (
 |---|---|---|---|
 | GET | `/api/backgrounds` | 获取系统背景图片列表（无需登录；仅返回系统图片，不包含用户上传的 `user_*` 文件） | 无 |
 | POST | `/api/backgrounds/upload` | 上传自定义背景图（multipart form，field: background） | 需要 |
+| POST | `/api/backgrounds/delete` | 删除用户自定义背景图（删除文件 + 清空 `users.background_url`） | 需要 |
 
 ### 6.6 管理员
 
 | 方法 | 路径 | 说明 | 鉴权 |
 |---|---|---|---|
+| GET | `/api/admin/stats` | 统计仪表盘（总用户/题目/提交数） | 需要 + admin |
 | GET | `/api/admin/questions` | 题目列表（含隐藏题目） | 需要 + admin |
 | GET | `/api/admin/questions/:id` | 单题详情（含隐藏题目） | 需要 + admin |
 | POST | `/api/admin/questions` | 创建题目 | 需要 + admin |
 | PUT | `/api/admin/questions/:id` | 编辑题目 | 需要 + admin |
 | DELETE | `/api/admin/questions/:id` | 删除题目 | 需要 + admin |
+| POST | `/api/admin/questions/batch` | 批量操作（hide/show/delete，body: {action, ids}） | 需要 + admin |
 | GET | `/api/admin/questions/:id/testcases` | 获取测试用例列表 | 需要 + admin |
 | POST | `/api/admin/questions/:id/testcases` | 添加测试用例 | 需要 + admin |
 | PUT | `/api/admin/questions/:id/testcases/:tc_id` | 编辑测试用例 | 需要 + admin |
 | DELETE | `/api/admin/questions/:id/testcases/:tc_id` | 删除测试用例 | 需要 + admin |
+| POST | `/api/admin/reference/generate` | 编译运行标程生成期望输出（body: {code, input_data}，多组输入用 \|\|\| 分隔） | 需要 + admin |
+| GET | `/api/admin/users` | 用户列表（分页+搜索，参数: page, search） | 需要 + admin |
+| DELETE | `/api/admin/users/:id` | 删除用户 | 需要 + admin |
+| PUT | `/api/admin/users/:id/admin` | 提升/取消管理员（body: {is_admin: bool}） | 需要 + admin |
+| GET | `/api/admin/announcements` | 公告列表（管理员视图） | 需要 + admin |
+| POST | `/api/admin/announcements` | 发布公告 | 需要 + admin |
+| PUT | `/api/admin/announcements/:id` | 编辑公告 | 需要 + admin |
+| DELETE | `/api/admin/announcements/:id` | 删除公告 | 需要 + admin |
+
+### 6.7 公告（公开）
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|---|---|---|---|
+| GET | `/api/announcements` | 获取所有公告（按置顶+创建时间排序） | 无 |
 
 ---
 
@@ -329,16 +366,20 @@ CREATE TABLE submissions (
 ## 8. 前端路由与页面（SPA + Hash）
 
 | Hash 路由 | 页面 | 说明 |
-|---|---|---|
+|---|---|---|---|
 | `#/` 或 `#/login` | 登录页 | 未登录默认 |
 | `#/register` | 注册页 | |
 | `#/problems` | 题目列表 | 需要登录 |
 | `#/problems/:id` | 题目详情 + 提交区 | 左右分栏：左题目描述，右 ACE 代码编辑器 |
 | `#/result/:submissionId` | 判题结果页 | 测试点方块网格 + 详情展开（提交后跳转到此页） |
-| `#/user` | 用户中心 | 提交历史 |
-| `#/admin` | 后台管理首页 | 仅管理员 |
-| `#/admin/questions` | 题目管理 | |
-| `#/admin/questions/:id` | 编辑题目 + 测试用例管理 | |
+| `#/user` | 用户中心 | 提交历史（管理员不可见，导航栏隐藏） |
+| `#/announcements` | 系统公告页 | 公开页面，展示所有公告 |
+| `#/admin` | 后台管理首页 | 仅管理员，Tab 切换：统计/题目/用户/公告 |
+| `#/admin/stats` | 管理员 → 统计 | |
+| `#/admin/questions` | 管理员 → 题目管理 | 列表+批量操作+创建 |
+| `#/admin/questions/:id` | 管理员 → 编辑题目 | 编辑题目 + 测试用例管理 + 标程自动生成 |
+| `#/admin/users` | 管理员 → 用户管理 | 分页+搜索+权限切换+删除 |
+| `#/admin/announcements` | 管理员 → 公告管理 | 发布/编辑/删除公告 |
 | `#/404` | 404 页面 | 路由未匹配 |
 | `#/500` | 500 页面 | 服务器异常 |
 
@@ -349,7 +390,7 @@ CREATE TABLE submissions (
 ## 9. 项目目录结构（实际实现）
 
 ```
-VibeOJ/
+MioOJ/
 ├── SPEC.md
 ├── CMakeLists.txt                    # CMake 构建配置
 ├── Makefile                          # Makefile 构建配置（二选一）
@@ -369,7 +410,8 @@ VibeOJ/
 │   │   ├── problem.cpp               # 题目列表（仅 is_visible=1）、题目详情
 │   │   ├── submission.cpp            # 提交代码 → 入库 → 投递判题引擎、结果查询
 │   │   ├── user.cpp                  # 个人资料、提交历史（分页）
-│   │   └── admin.cpp                 # 题目 CRUD + 测试用例 CRUD（admin 鉴权）
+│   │   ├── admin.cpp                 # 题目 CRUD + 测试用例 CRUD + 统计 + 批量操作 + 标程生成 + 用户管理（admin 鉴权）
+│   │   ├── announcement.cpp          # 公告 CRUD（管理员/公开）
 │   ├── judge/
 │   │   ├── engine.hpp/.cpp           # 判题引擎：接收任务 → 编译 → 遍历测试点 → 运行 → 写结果
 │   │   ├── compiler.hpp/.cpp         # 编译模块：临时文件 → g++ -O2 -std=c++17 → 超时 10s
@@ -399,9 +441,12 @@ VibeOJ/
 │       │   ├── problemDetail.js      # 题目详情 + ACE 代码编辑器 + 提交
 │       │   ├── result.js             # 判题结果（方块网格 + 轮询 + 详情展开）
 │       │   ├── userCenter.js         # 用户中心（提交历史分页）
-│       │   ├── admin.js              # 后台管理首页（题目列表 + 删除）
-│       │   ├── adminQuestions.js     # 新建题目表单
-│       │   └── adminQuestionEdit.js  # 编辑题目 + 测试用例管理
+│       │   ├── admin.js              # 后台管理首页 Tab 布局（统计 + 题目管理 + 批量操作）
+│       │   ├── adminQuestions.js     # 新建题目表单（Tab 内嵌或独立打开）
+│       │   ├── adminQuestionEdit.js  # 编辑题目 + 测试用例管理（行内编辑）+ 标程自动生成
+│       │   ├── adminUsers.js         # 用户管理（分页+搜索+权限切换+删除）
+│       │   ├── adminAnnouncements.js # 公告管理（发布+编辑+删除）
+│       │   └── announcements.js      # 公示公告展示页
 └── test/                             # 测试用例示例（预留）
     └── cases/
 ```
@@ -410,48 +455,58 @@ VibeOJ/
 
 ## 10. 前端页面线框
 
-> **视觉风格**：支持两种背景模式，通过导航栏 ⚙ 设置面板切换：
->   - **相册模式（默认）**：从 `web/backgrounds/` 目录随机选取图片作为页面背景，自动添加 CSS 高斯模糊（blur 18px）+ 亮度降低（brightness 0.35），确保在前端暗色毛玻璃面板上文字清晰可读。
->   - **LeetCode 经典白模式**：纯白/浅灰配色，白色背景 (#f7f8fa)，无毛玻璃效果，面板使用纯白卡片+浅灰边框风格，与 LeetCode 官网视觉效果一致。
->   - 支持用户通过设置面板上传自定义背景图（存储到 `web/backgrounds/` 目录），上传前弹出 Canvas 裁剪对话框（锁定视口宽高比，支持拖拽移动 + 四角/四边缩放），裁剪后上传并立即应用。
+> **视觉风格（MioOJ 黑金主题）**：支持两种背景模式，通过导航栏 ⚙ 设置面板切换：
+>   - **相册模式（默认）**：从 `web/backgrounds/` 目录随机选取图片作为页面背景；独立暗色遮罩层 `#bg-overlay` 确保前景可读。**相册模式下**导航栏、登录框、设置面板采用**双层金边镶嵌**（外金线 + 内暗框）；整体黑金奢华配色（暖金 `#d4af37` / `#fcd9b8` 强调，替代旧版亮黄 `#fdbb2d`）。
+>   - **LeetCode 经典白模式**：纯白/浅灰配色，白色背景 (#f7f8fa)，无毛玻璃效果，面板使用纯白卡片+浅灰边框，**不显示金边镶嵌**。
+>   - 品牌 Logo：**MioOJ** + 可爱猫耳吉祥物 SVG；设置面板开关为青蓝→浅粉长条样式（与黑金主色并存）。
+>   - 支持用户通过设置面板上传自定义背景图（存储到 `web/backgrounds/` 目录），上传前弹出 Canvas 裁剪对话框。
+
+### 设计 Token（相册模式）
+
+| Token | 值 | 用途 |
+|---|---|---|
+| `--gold-light` | `#fcd9b8` | Logo、标题、导航 hover |
+| `--gold-mid` | `#d4af37` | 主按钮、强调边框、选中态 |
+| `--gold-dark` | `#b8860b` | 按钮渐变深色端 |
+| 金边镶嵌 | 外 `rgba(212,175,55,0.45)` + 内暗框 | `#navbar` / `.auth-box` / `#settings-panel` |
+| 难度标签 | `.diff-easy` / `.diff-medium` / `.diff-hard` | 全站统一 CSS 类（暗/白模式各一套） |
 
 ### 登录页 `#/login`
 ```
 ┌─────────────────────────────────┐
-│          VibeOJ                  │
-│  ┌─────────────────────────┐    │
+│      🐱 MioOJ                    │
+│  ┌─金边───────────────────┐    │
 │  │ 用户名: [            ]   │    │
 │  │ 密码:   [            ]   │    │
 │  │  [ 登 录 ]               │    │
-│  │                          │    │
-│  │ 没有账号？[去注册]        │    │
+│  │ 没有账号？[去注册]·[公告] │    │
 │  └─────────────────────────┘    │
 └─────────────────────────────────┘
 ```
 
 ### 题目列表 `#/problems`
 ```
-┌────────────────────────────────────────────┐
-│  VibeOJ    [题目] [我的] [管理] [退出]       │
-├────────────────────────────────────────────┤
-│  [🔍 搜索题目...]  [▼ 全部难度]              │
-│                                              │
-│  #  标题                时间限制  内存限制    │
-│  1  A+B Problem          1s        256MB   │
-│  2  最大子数组和          1s        256MB   │
-│  ...                                       │
-└────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│ 🐱 MioOJ   [题目*] [公告] [我的] [管理] [退出]  ⚙      │  ← * 当前页高亮
+├──────────────────────────────────────────────────────┤
+│  [🔍 搜索题目...]  [▼ 全部难度]                        │
+│  #  标题              难度    时间限制  内存限制       │
+│  1  A+B Problem       简单     1s       256MB        │
+│  ...                                                 │
+│  （无题目时显示引导文案）                              │
+└──────────────────────────────────────────────────────┘
 ```
 
-> 搜索框输入关键词实时过滤标题，难度下拉筛选（全部/简单/中等/困难），客户端即时过滤无需请求后端。
+> 搜索框支持编号（`1` / `#3`）、标题关键词、难度文字；难度下拉可组合筛选，客户端即时过滤无需请求后端。
 
 ### 题目详情 + 提交 `#/problems/1`（左右分栏布局）
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │  ← 返回题目列表     A+B Problem                                          │
-├────────────────────────────┬─────────────────────────────────────────────┤
-│  左侧：题目面板 (scroll)     │  右侧：ACE 代码编辑器面板                     │
+├─────────────────────────┬──┤────────────────────────────────────────────┤
+│  左侧：题目面板 (可调宽度) │║│  右侧：ACE 代码编辑器面板                      │
+│                            │║│  [主题: Monokai ▼]                           │
 │                            │  ┌──────────────────────────────────────┐   │
 │  【题目描述】                │  │ 代码编辑器 (C++) - ACE Editor         │   │
 │  给定两个整数 a 和 b，      │  │ ┌──────────────────────────────────┐ │   │
@@ -482,7 +537,11 @@ VibeOJ/
 └────────────────────────────┴─────────────────────────────────────────────┘
 ```
 
-> **代码持久化**：每个题目的代码自动保存到浏览器 `localStorage`（键 `code_{题目ID}`）。切换题目或返回时自动恢复，提交后不清除（500ms debounce）。
+> **左右分栏可调**：题目详情页中间有金色 `layout-resizer` 拖拽条，宽度比例持久化到 `localStorage`（键 `miooj_split_ratio`，默认 0.5）。
+>
+> **编辑器主题**：编辑器工具栏提供主题下拉（Chrome / Tomorrow / Monokai / One Dark），持久化到 `localStorage`（键 `miooj_editor_theme`）。
+>
+> **提交反馈**：提交时按钮进入 loading 态，成功/失败通过 Toast 通知（非 alert）。
 >
 > **加载已通过代码**：提交按钮旁提供「加载已通过代码」按钮，点击后通过 `GET /api/user/ac-codes/:question_id` 获取当前用户在该题下**所有** AC 提交记录，以弹出下拉列表展示（含提交 ID、时间、性能数据），点击任一条即自动填入 ACE 编辑器；若用户尚无 AC 记录则提示「该题目暂无已通过的提交」。加载后「↩撤销」按钮出现，点击可回退到加载前的用户自己编写的代码（单级撤销）。
 >
@@ -494,7 +553,9 @@ VibeOJ/
 - 一排最多 7 个方块，超出自动换行
 - 颜色按状态区分：AC=绿色, WA=红色, TLE=橙色, MLE=深橙, RE=紫色, CE=灰色, PENDING/COMPILING/RUNNING=旋转动画
 - 点击某个方块 → 下方展开该测试点的状态/耗时/内存详情（不展示测试数据，防泄题）
-- 当前选中的方块有高亮边框（▶ 标记）
+- 当前选中的方块有高亮边框（相册模式为金色 `#d4af37`；▶ 标记）
+- 点击方块 → 详情面板带展开动画
+- 结果页提供「再试一次」按钮，跳转回 `#/problems/:id`
 - 页面底部折叠展示提交的源代码
 
 > **隐私保护**：测试点的输入、期望输出、实际输出不存储到 `detail_json` 中，也不在前端展示。用户只能看到每个测试点的判题结果（状态、耗时、内存）。
@@ -659,6 +720,17 @@ VibeOJ/
 - [x] API: 题目 CRUD
 - [x] API: 测试用例 CRUD
 - [x] 前端后台管理页
+- [x] 管理页 Tab 导航布局（统计 | 题目管理 | 用户管理 | 公告管理）
+- [x] 统计仪表盘（总用户/题目/提交数）
+- [x] 题目批量操作（全选/隐藏/显示/删除）
+
+### Phase 6.1 — 后台管理增强（录题 + 用户 + 公告）
+- [x] 录题标程：录入 C++ 标程 → 一键编译运行 → 自动填充每组输入的期望输出
+- [x] 测试用例行内编辑 UI（点击编辑按钮行内修改 input/expected_output/order_index）
+- [x] 用户管理：用户列表（分页+搜索）+ 删除用户 + 提升/取消管理员权限
+- [x] 系统公告：管理员发布/编辑/删除公告，`#/announcements` 公共公告展示页
+- [x] 管理员导航栏隐藏「我的」链接
+- [x] announcements 数据库表 + CRUD API + 公开列表 API
 
 ### Phase 7 — 错误处理与打磨
 - [x] 404/500 页面
@@ -782,6 +854,31 @@ VibeOJ/
 - [x] `vibeoj_custom_bg_url` localStorage 缓存：持久化用户自定义壁纸 URL，刷新页面后开关状态和壁纸选择正确恢复
 - [x] BUILD PASS：编译通过，0 warning
 
+### Phase 21 — 壁纸删除与恢复默认
+- [x] 后端 `POST /api/backgrounds/delete`：删除用户自定义背景文件并清空 DB 中 `users.background_url`（`handler/background.cpp`）
+- [x] 前端新增「删除」按钮：位于「使用我的壁纸」行右侧，仅当存在自定义壁纸时显示，点击确认后删除自定义壁纸并恢复系统背景（`effects.js` + `router.js` + `index.html` + `style.css`）
+- [x] 前端新增「恢复默认」按钮：位于设置面板底部，一键重置所有背景设置（删除自定义壁纸 + 开启相册模式 + 虚化归零 + 加载系统背景）（`effects.js` + `router.js` + `index.html` + `style.css`）
+- [x] `window.deleteCustomBackground()`：调用 delete API → 清空 localStorage 缓存 → 隐藏「使用我的壁纸」行和「删除」按钮 → 切换为系统背景（`effects.js`）
+- [x] `window.resetAllBackgrounds()`：合并删除 + 重置模式/虚化 + 恢复 UI 状态（`effects.js`）
+- [x] 删除按钮状态由 `updateDeleteBgBtn()` 统一管理，在 `updateUseCustomBgToggle()` 中联动调用，确保 UI 一致性（`effects.js`）
+- [x] 新按钮 CSS 适配 LeetCode 白色模式（`style.css`）
+- [x] BUILD PASS：编译通过，0 error
+
+### Phase 22 — MioOJ 品牌重塑与前端体验优化
+- [x] 用户可见品牌名 VibeOJ → **MioOJ**（`<title>`、导航 Logo、登录/注册标题）；保留内部 `vibeoj_*` localStorage 键与数据库名不变
+- [x] 导航栏新增可爱猫耳吉祥物 SVG + 品牌链接样式（`.brand-link` / `.brand-mascot`）
+- [x] **黑金奢华主题**：主强调色由亮黄 `#fdbb2d` 改为暖金 `#d4af37`；CSS 变量 `--gold-light/mid/dark`
+- [x] **相册模式金边镶嵌**（双层：外金线 + 内暗框）：`#navbar`、`.auth-box`、`#settings-panel`；白模式不显示
+- [x] 导航栏：字号略放大、当前页 `.nav-active` 高亮；顺序 题目 | 公告 | 我的 | 管理 | 退出；未登录 公告 | 登录
+- [x] 页面切换流畅过渡（`page-leaving` / `page-enter` 动画）
+- [x] 全局 Toast 通知组件（`showToast()`，`#toast-container`）；上传背景/提交代码等使用 Toast
+- [x] 题目列表：统一难度标签 CSS 类（`.diff-badge`）；搜索/筛选框聚焦金边；空状态引导文案
+- [x] 题目详情：可拖拽调节左右分栏（`miooj_split_ratio`）；编辑器主题四选一（`miooj_editor_theme`）；样例代码块金边左条；提交 loading
+- [x] 结果页：测试点详情展开动画；「再试一次」按钮
+- [x] 用户中心：统计数字改为金边卡片（`.stats-cards`）
+- [x] 公告页：置顶公告 `.announce-card-pinned` 金边高亮
+- [x] 设置面板开关：青蓝→浅粉长条 toggle + 点击流动拖尾（关闭态白色底）
+
 ---
 
 ## 12. 验收标准
@@ -825,6 +922,26 @@ VibeOJ/
 | AC-35 | 未登录可开关壁纸 | 登录/注册页面导航栏显示齿轮按钮，用户可打开设置面板切换「相册背景」开关 |
 | AC-36 | 使用我的壁纸开关 | 上传自定义壁纸后，设置面板出现「使用我的壁纸」toggle；开启显示自定义壁纸，关闭显示系统随机壁纸；关闭后再开启，恢复之前上传的自定义壁纸 |
 | AC-37 | 系统壁纸不泄露 | `GET /api/backgrounds` 仅返回系统图片（`pt*.jpg` 等），不返回其他用户上传的 `user_*` 文件 |
+| AC-46 | 删除自定义壁纸 | 设置面板「使用我的壁纸」行右侧显示「删除」按钮；点击确认后删除自定义壁纸文件并清空 DB 记录，恢复系统背景 |
+| AC-47 | 恢复默认背景 | 设置面板底部「恢复默认」按钮；一键删除自定义壁纸 + 开启相册模式 + 虚化归零 + 加载系统背景 |
+| AC-48 | 删除/恢复操作可逆 | 删除自定义壁纸后可通过重新上传恢复；恢复默认后可通过重新开启相册背景恢复系统壁纸显示 |
+| AC-38 | 管理员统计仪表盘 | 管理员访问 `#/admin` 默认显示统计 Tab，展示总用户数、总题目数、总提交数 |
+| AC-39 | 题目批量操作 | 管理员可在题目管理 Tab 全选题目，批量执行隐藏/显示/删除操作 |
+| AC-40 | 测试用例行内编辑 | 在题目编辑页点击测试用例行的「编辑」按钮，行内切换为编辑模式，可修改 input/expected_output/order_index，点击「保存」提交更新 |
+| AC-41 | 标程自动生成期望输出 | 在题目编辑页粘贴 C++ 标程代码，点击「编译运行，生成期望输出」→ 后端编译运行标程对每组输入生成输出 → 自动填充到对应测试用例的 expected_output |
+| AC-42 | 用户管理 | 管理员在用户管理 Tab 查看分页用户列表（含搜索），可删除用户、提升/取消管理员权限 |
+| AC-43 | 系统公告 | 管理员可在公告管理 Tab 发布/编辑/删除公告；任何用户访问 `#/announcements` 查看所有公告（置顶优先） |
+| AC-44 | 管理员导航栏 | 管理员导航栏不显示「我的」，显示：题目 \| 公告 \| 管理 \| 退出 |
+| AC-45 | 管理员 Tab 导航 | 管理页顶部四个 Tab（统计/题目管理/用户管理/公告管理），点击切换对应的管理模块 |
+| AC-49 | MioOJ 品牌 | 用户可见界面显示 MioOJ + 猫耳吉祥物；内部 API/DB 标识可仍为 vibeoj |
+| AC-50 | 相册模式金边 | 相册背景下导航栏/登录框/设置面板显示双层金边；LeetCode 白模式无金边 |
+| AC-51 | 导航高亮 | 当前路由对应导航项 `.nav-active` 高亮（题目详情页高亮「题目」） |
+| AC-52 | 页面过渡 | Hash 路由切换时有淡入淡出过渡动画 |
+| AC-53 | Toast 通知 | 提交成功/失败、背景上传成功等使用 Toast，非阻塞 alert |
+| AC-54 | 分栏可调 | 题目详情页拖拽中间分隔条调节左右宽度，刷新后保持 |
+| AC-55 | 编辑器主题 | 题目详情页可选择 ACE 主题（至少浅色+深色各一种），选择持久化 |
+| AC-56 | 结果页再试 | 判题结果页提供「再试一次」按钮回到对应题目 |
+| AC-57 | 公告导航入口 | 导航栏「公告」链接跳转 `#/announcements`；未登录也可访问 |
 
 ---
 

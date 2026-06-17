@@ -140,4 +140,39 @@ void register_background_routes(httplib::Server& svr) {
 
         res.set_content("{\"url\":\"" + url + "\"}", "application/json");
     });
+
+    svr.Post("/api/backgrounds/delete", [](const httplib::Request& req, httplib::Response& res) {
+        auto user = authenticate(req);
+        if (!user.valid) {
+            res.status = 401;
+            res.set_content("{\"error\":\"未登录\"}", "application/json");
+            return;
+        }
+
+        auto db = g_db->acquire();
+
+        std::string old_url;
+        db->query("SELECT background_url FROM users WHERE id=" + std::to_string(user.id));
+        MYSQL_RES* old_result = db->store_result();
+        if (old_result) {
+            MYSQL_ROW row = mysql_fetch_row(old_result);
+            if (row && row[0]) {
+                old_url = row[0];
+            }
+            mysql_free_result(old_result);
+        }
+
+        if (!old_url.empty()) {
+            std::string old_path = g_config.web_root + old_url;
+            try {
+                if (fs::exists(old_path)) {
+                    fs::remove(old_path);
+                }
+            } catch (...) {}
+        }
+
+        db->query("UPDATE users SET background_url=NULL WHERE id=" + std::to_string(user.id));
+
+        res.set_content("{\"success\":true}", "application/json");
+    });
 }

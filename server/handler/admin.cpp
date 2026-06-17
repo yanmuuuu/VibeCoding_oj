@@ -1,8 +1,13 @@
 #include <httplib.h>
 #include "../db/pool.hpp"
 #include "../middleware/auth.hpp"
+#include "../util/json_extract.hpp"
+#include "../judge/compiler.hpp"
+#include "../judge/runner.hpp"
+#include "../config.hpp"
 #include <sstream>
 #include <string>
+#include <cstdlib>
 
 static bool check_admin(const httplib::Request& req, httplib::Response& res) {
     AuthUser user = authenticate(req);
@@ -367,5 +372,212 @@ void register_admin_routes(httplib::Server& svr) {
         json += "]";
         if (result) mysql_free_result(result);
         res.set_content(json, "application/json");
+    });
+
+    // ===== Statistics =====
+
+    svr.Get("/api/admin/stats", [](const httplib::Request& req, httplib::Response& res) {
+        if (!check_admin(req, res)) return;
+
+        auto db = g_db->acquire();
+        int total_users = 0, total_questions = 0, total_submissions = 0;
+
+        db->query("SELECT COUNT(*) FROM users");
+        MYSQL_RES* r = db->store_result();
+        if (r) { MYSQL_ROW row = mysql_fetch_row(r); if (row && row[0]) total_users = std::stoi(row[0]); mysql_free_result(r); }
+
+        db->query("SELECT COUNT(*) FROM questions");
+        r = db->store_result();
+        if (r) { MYSQL_ROW row = mysql_fetch_row(r); if (row && row[0]) total_questions = std::stoi(row[0]); mysql_free_result(r); }
+
+        db->query("SELECT COUNT(*) FROM submissions");
+        r = db->store_result();
+        if (r) { MYSQL_ROW row = mysql_fetch_row(r); if (row && row[0]) total_submissions = std::stoi(row[0]); mysql_free_result(r); }
+
+        std::ostringstream json;
+        json << "{\"total_users\":" << total_users
+             << ",\"total_questions\":" << total_questions
+             << ",\"total_submissions\":" << total_submissions << "}";
+        res.set_content(json.str(), "application/json");
+    });
+
+    // ===== Batch Question Operations =====
+
+    svr.Post("/api/admin/questions/batch", [](const httplib::Request& req, httplib::Response& res) {
+        if (!check_admin(req, res)) return;
+
+        std::string action = extract_json_string(req.body, "action");
+        if (action != "hide" && action != "show" && action != "delete") {
+            res.status = 400;
+            res.set_content("{\"error\":\"无效操作\"}", "application/json");
+            return;
+        }
+
+        std::string ids_str = extract_json_string(req.body, "ids");
+        if (ids_str.empty()) {
+            res.status = 400;
+            res.set_content("{\"error\":\"未提供题目ID\"}", "application/json");
+            return;
+        }
+
+        auto db = g_db->acquire();
+        if (action == "delete") {
+            db->query("DELETE FROM questions WHERE id IN (" + ids_str + ")");
+        } else {
+            db->query(std::string("UPDATE questions SET is_visible=") + (action == "show" ? "1" : "0") + " WHERE id IN (" + ids_str + ")");
+        }
+        res.set_content("{\"ok\":true}", "application/json");
+    });
+
+    // ===== Reference Code Generation =====
+
+    svr.Post("/api/admin/reference/generate", [](const httplib::Request& req, httplib::Response& res) {
+        if (!check_admin(req, res)) return;
+
+        std::string code = extract_json_string(req.body, "code");
+        std::string inputs_json = extract_json_string(req.body, "input_data");
+        if (code.empty()) {
+            res.status = 400;
+            res.set_content("{\"error\":\"请提供参考代码\"}", "application/json");
+            return;
+        }
+
+        // Compile the reference code
+        auto compile_res = compile_code(code, g_config.tmp_dir, g_config.compile_timeout);
+        if (!compile_res.success) {
+            std::ostringstream json;
+            json << "{\"ok\":false,\"compile_error\":\"" << json_escape(compile_res.error) << "\"}";
+            res.set_content(json.str(), "application/json");
+            return;
+        }
+
+        // Parse input data lines separated by |||
+        std::string outputs_json;
+        // inputs_json contains all test inputs separated by |||
+        // We return outputs separated by |||
+        auto esc = [](const std::string& s) -> std::string {
+            return json_escape(s);
+        };
+
+        std::ostringstream json;
+        json << "{\"ok\":true,\"outputs\":[";
+
+        if (!inputs_json.empty()) {
+            std::vector<std::string> inputs;
+            size_t start = 0;
+            size_t pos;
+            const std::string delim = "|||";
+            while ((pos = inputs_json.find(delim, start)) != std::string::npos) {
+                inputs.push_back(inputs_json.substr(start, pos - start));
+                start = pos + delim.size();
+            }
+            inputs.push_back(inputs_json.substr(start));
+
+            bool first = true;
+            for (size_t i = 0; i < inputs.size(); i++) {
+                TestCase tc;
+                tc.id = static_cast<int>(i);
+                tc.order_index = static_cast<int>(i);
+                tc.input_data = inputs[i];
+                tc.expected_output = "";
+
+                auto run_res = run_single(compile_res.binary_path, tc, 5, 512);
+                if (!first) json << ",";
+                first = false;
+                json << "\"" << esc(run_res.actual_output) << "\"";
+            }
+        }
+
+        json << "]}";
+
+        // Clean up binary
+        if (!compile_res.binary_path.empty()) {
+            unlink(compile_res.binary_path.c_str());
+        }
+
+        res.set_content(json.str(), "application/json");
+    });
+
+    // ===== User Management =====
+
+    svr.Get("/api/admin/users", [](const httplib::Request& req, httplib::Response& res) {
+        if (!check_admin(req, res)) return;
+
+        int page = 1;
+        int per_page = 20;
+        std::string search;
+        if (req.has_param("page")) try { page = std::stoi(req.get_param_value("page")); } catch (...) {}
+        if (req.has_param("per_page")) try { per_page = std::stoi(req.get_param_value("per_page")); } catch (...) {}
+        if (req.has_param("search")) search = req.get_param_value("search");
+        int offset = (page - 1) * per_page;
+
+        auto db = g_db->acquire();
+
+        // Count total
+        std::string count_sql = "SELECT COUNT(*) FROM users";
+        if (!search.empty()) {
+            count_sql += " WHERE username LIKE '%" + db->escape(search) + "%'";
+        }
+        db->query(count_sql);
+        int total = 0;
+        MYSQL_RES* cr = db->store_result();
+        if (cr) { MYSQL_ROW row = mysql_fetch_row(cr); if (row && row[0]) total = std::stoi(row[0]); mysql_free_result(cr); }
+
+        std::string sql = "SELECT id, username, is_admin, created_at FROM users";
+        if (!search.empty()) {
+            sql += " WHERE username LIKE '%" + db->escape(search) + "%'";
+        }
+        sql += " ORDER BY id ASC LIMIT " + std::to_string(per_page) + " OFFSET " + std::to_string(offset);
+        db->query(sql);
+
+        MYSQL_RES* result = db->store_result();
+        std::ostringstream json;
+        json << "{\"total\":" << total << ",\"users\":[";
+        bool first = true;
+        MYSQL_ROW row;
+        if (result) {
+            while ((row = mysql_fetch_row(result))) {
+                if (!first) json << ",";
+                first = false;
+                json << "{\"id\":" << (row[0] ? row[0] : "0")
+                     << ",\"username\":\"" << json_escape(row[1] ? row[1] : "") << "\""
+                     << ",\"is_admin\":" << (row[2] && std::stoi(row[2]) ? "true" : "false")
+                     << ",\"created_at\":\"" << (row[3] ? row[3] : "") << "\""
+                     << "}";
+            }
+        }
+        json << "]}";
+        if (result) mysql_free_result(result);
+        res.set_content(json.str(), "application/json");
+    });
+
+    svr.Delete(R"(/api/admin/users/(\d+))", [](const httplib::Request& req, httplib::Response& res) {
+        if (!check_admin(req, res)) return;
+        int uid = std::stoi(req.matches[1]);
+
+        auto db = g_db->acquire();
+        db->query("DELETE FROM users WHERE id=" + std::to_string(uid));
+        if (db->affected_rows() == 0) {
+            res.status = 404;
+            res.set_content("{\"error\":\"用户不存在\"}", "application/json");
+            return;
+        }
+        res.set_content("{\"ok\":true}", "application/json");
+    });
+
+    svr.Put(R"(/api/admin/users/(\d+)/admin)", [](const httplib::Request& req, httplib::Response& res) {
+        if (!check_admin(req, res)) return;
+        int uid = std::stoi(req.matches[1]);
+
+        bool set_admin = extract_json_bool(req.body, "is_admin");
+
+        auto db = g_db->acquire();
+        db->query("UPDATE users SET is_admin=" + std::string(set_admin ? "1" : "0") + " WHERE id=" + std::to_string(uid));
+        if (db->affected_rows() == 0) {
+            res.status = 404;
+            res.set_content("{\"error\":\"用户不存在\"}", "application/json");
+            return;
+        }
+        res.set_content("{\"ok\":true}", "application/json");
     });
 }

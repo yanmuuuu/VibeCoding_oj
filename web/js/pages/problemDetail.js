@@ -23,8 +23,8 @@ async function renderProblemDetail(main) {
                 <h2>${escapeHtml(p.title)} ${difficultyBadge(p.difficulty)}</h2>
                 <div></div>
             </div>
-            <div class="problem-layout">
-                <div class="problem-left">
+            <div class="problem-layout" id="problem-layout">
+                <div class="problem-left" id="problem-left">
                     <div class="section">
                         <h3>题目描述</h3>
                         <div>${escapeHtml(p.description).replace(/\\n/g, '<br>')}</div>
@@ -33,17 +33,26 @@ async function renderProblemDetail(main) {
                     ${p.output_format ? `<div class="section"><h3>输出格式</h3><div>${escapeHtml(p.output_format)}</div></div>` : ''}
                     <div class="section">
                         <h3>样例</h3>
-                        ${p.sample_input ? `<div><strong>输入:</strong><pre>${escapeHtml(p.sample_input)}</pre></div>` : ''}
-                        ${p.sample_output ? `<div><strong>输出:</strong><pre>${escapeHtml(p.sample_output)}</pre></div>` : ''}
+                        ${p.sample_input ? `<div><strong>输入:</strong><pre class="sample-pre">${escapeHtml(p.sample_input)}</pre></div>` : ''}
+                        ${p.sample_output ? `<div><strong>输出:</strong><pre class="sample-pre">${escapeHtml(p.sample_output)}</pre></div>` : ''}
                     </div>
                     <div class="section">
                         <span class="limit-badge">${p.time_limit}s</span>
                         <span class="limit-badge">${p.memory_limit}MB</span>
                     </div>
                 </div>
-                <div class="problem-right">
+                <div class="layout-resizer" id="layout-resizer" title="拖动调节左右宽度"></div>
+                <div class="problem-right" id="problem-right">
                     <div class="editor-wrapper">
-                        <h3>代码编辑器 (C++)</h3>
+                        <div class="editor-toolbar">
+                            <h3>代码编辑器 (C++)</h3>
+                            <select id="editor-theme" class="editor-theme-select" title="编辑器主题">
+                                <option value="ace/theme/chrome">浅色 Chrome</option>
+                                <option value="ace/theme/tomorrow">浅色 Tomorrow</option>
+                                <option value="ace/theme/monokai">深色 Monokai</option>
+                                <option value="ace/theme/one_dark">深色 One Dark</option>
+                            </select>
+                        </div>
                         <div id="code-editor">#include &lt;iostream&gt;
 using namespace std;
 int main() {
@@ -78,8 +87,46 @@ int main() {
             </div>
         </div>`;
 
+    const layout = $('#problem-layout');
+    const leftPanel = $('#problem-left');
+    const rightPanel = $('#problem-right');
+    const resizer = $('#layout-resizer');
+    let splitRatio = parseFloat(localStorage.getItem('miooj_split_ratio'));
+    if (isNaN(splitRatio)) splitRatio = 0.5;
+
+    function applySplit(ratio) {
+        splitRatio = Math.max(0.28, Math.min(0.72, ratio));
+        leftPanel.style.flex = '0 0 ' + (splitRatio * 100) + '%';
+        rightPanel.style.flex = '1 1 auto';
+        localStorage.setItem('miooj_split_ratio', splitRatio);
+    }
+    applySplit(splitRatio);
+
+    let dragging = false;
+    resizer.addEventListener('mousedown', function(e) {
+        dragging = true;
+        resizer.classList.add('dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+    document.addEventListener('mousemove', function(e) {
+        if (!dragging) return;
+        const rect = layout.getBoundingClientRect();
+        applySplit((e.clientX - rect.left) / rect.width);
+    });
+    document.addEventListener('mouseup', function() {
+        if (!dragging) return;
+        dragging = false;
+        resizer.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    });
+
     const editor = ace.edit('code-editor');
-    editor.setTheme('ace/theme/chrome');
+    const themeKey = 'miooj_editor_theme';
+    const savedTheme = localStorage.getItem(themeKey) || 'ace/theme/monokai';
+    editor.setTheme(savedTheme);
     editor.session.setMode('ace/mode/c_cpp');
     editor.setOptions({
         fontSize: '14px',
@@ -93,6 +140,13 @@ int main() {
     });
     editor.renderer.setScrollMargin(8, 8, 0, 0);
     editor.session.setUseWrapMode(false);
+
+    const themeSelect = $('#editor-theme');
+    themeSelect.value = savedTheme;
+    themeSelect.addEventListener('change', function() {
+        editor.setTheme(themeSelect.value);
+        localStorage.setItem(themeKey, themeSelect.value);
+    });
 
     const storageKey = 'code_' + id;
     let saveTimeout = null;
@@ -154,16 +208,19 @@ int main() {
 
     async function handleSubmit() {
         const code = editor.getValue().trim();
-        if (!code) { alert('请输入代码'); return; }
+        if (!code) { showToast('请输入代码', 'warning'); return; }
         try {
             submitBtn.disabled = true;
+            submitBtn.classList.add('btn-loading');
             submitBtn.textContent = '提交中...';
             localStorage.setItem(storageKey, code);
             const result = await API.submit(parseInt(id), code);
+            showToast('提交成功，正在跳转结果页…', 'success', 1800);
             App.navigate('#/result/' + result.submission_id);
         } catch(e) {
-            alert('提交失败: ' + e.message);
+            showToast('提交失败: ' + e.message, 'error');
             submitBtn.disabled = false;
+            submitBtn.classList.remove('btn-loading');
             submitBtn.textContent = '提交代码';
         }
     }
@@ -212,6 +269,7 @@ int main() {
                         editor.clearSelection();
                         undoAcBtn.style.display = 'inline-block';
                         closeModal();
+                        showToast('已加载通过代码', 'success');
                     });
                 });
             }
@@ -236,4 +294,6 @@ int main() {
         bindKey: {win: 'Ctrl-Enter', mac: 'Command-Enter'},
         exec: handleSubmit
     });
+
+    setTimeout(function() { editor.resize(); }, 100);
 }

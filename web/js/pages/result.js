@@ -2,6 +2,7 @@ async function renderResult(main) {
     await App.ensureAuth();
     const subId = main.dataset.submissionId;
     let polling = null;
+    let questionId = null;
 
     function getStatusColor(status) {
         const colors = {
@@ -13,6 +14,7 @@ async function renderResult(main) {
     }
 
     function render(data) {
+        questionId = data.question_id;
         const status = data.status;
         const detail = data.detail_json ? (typeof data.detail_json === 'string' ? JSON.parse(data.detail_json) : data.detail_json) : [];
 
@@ -42,6 +44,9 @@ async function renderResult(main) {
                     <div>通过: ${data.passed_count}/${data.total_count}</div>
                     <div>耗时: ${data.total_time}ms | 内存: ${data.total_memory}KB</div>
                 </div>
+                <div class="result-actions">
+                    <a href="#/problems/${data.question_id}" class="btn-primary btn-retry">再试一次</a>
+                </div>
                 <div class="test-blocks" id="test-blocks">${blocksHtml}</div>
                 <div class="test-detail" id="test-detail"></div>
                 <div class="code-section">
@@ -50,7 +55,6 @@ async function renderResult(main) {
                 </div>
             </div>`;
 
-        // Click handlers for test blocks
         $$('.test-block').forEach(block => {
             block.addEventListener('click', function() {
                 const idx = parseInt(this.dataset.idx);
@@ -60,7 +64,6 @@ async function renderResult(main) {
             });
         });
 
-        // Code toggle
         $('#code-toggle').addEventListener('click', () => {
             const codeEl = $('#code-content');
             const toggle = $('#code-toggle');
@@ -86,22 +89,19 @@ async function renderResult(main) {
             const statusDesc = statusText[tc.status] || tc.status;
 
             detailEl.innerHTML = `
-                <div class="detail-box">
+                <div class="detail-box detail-box-animate">
                     <h4>测试点 #${tc.index || (idx+1)} (已选中)</h4>
                     <div>状态: <span style="color:${getStatusColor(tc.status)}">${tc.status} - ${statusDesc}</span> | 耗时: ${tc.time_ms}ms | 内存: ${tc.memory_kb}KB</div>
                 </div>`;
         }
 
-        // Show first test case detail by default
         if (detail.length > 0) showDetail(0);
 
-        // Stop polling if final state
         if (status !== 'PENDING' && status !== 'COMPILING' && status !== 'RUNNING') {
             if (polling) clearInterval(polling);
         }
     }
 
-    // Initial fetch
     try {
         const data = await API.getSubmission(subId);
         render(data);

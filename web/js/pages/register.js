@@ -1,7 +1,7 @@
 async function renderRegister(main) {
     main.innerHTML = `
         <div class="auth-container">
-            <h1>VibeOJ</h1>
+            <h1 class="auth-title">${brandMascotHtml()} MioOJ</h1>
             <div class="auth-box">
                 <div class="form-group">
                     <label>用户名（至少3个字符）</label>

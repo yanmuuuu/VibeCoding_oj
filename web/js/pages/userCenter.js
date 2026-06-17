@@ -68,13 +68,18 @@ async function renderUserCenter(main) {
     function updateStats() {
         const statsEl = $('#submission-stats');
         if (problemStatuses.length === 0) {
-            statsEl.textContent = '';
+            statsEl.innerHTML = '';
             return;
         }
         const totalSubs = allSubs.length || problemStatuses.reduce((s, p) => s + p.attempt_count, 0);
         const solvedCount = problemStatuses.filter(p => p.solved).length;
         const attemptedCount = problemStatuses.filter(p => !p.solved).length;
-        statsEl.innerHTML = `共 ${totalSubs} 次提交，通过 <strong>${solvedCount}</strong> 题，尝试 <strong>${attemptedCount}</strong> 题`;
+        statsEl.innerHTML = `
+            <div class="stats-cards">
+                <div class="stat-card"><div class="stat-num">${totalSubs}</div><div class="stat-label">总提交</div></div>
+                <div class="stat-card"><div class="stat-num">${solvedCount}</div><div class="stat-label">已通过</div></div>
+                <div class="stat-card"><div class="stat-num">${attemptedCount}</div><div class="stat-label">尝试中</div></div>
+            </div>`;
     }
 
     async function loadHistoryPage() {

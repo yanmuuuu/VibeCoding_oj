@@ -21,6 +21,7 @@ void register_submission_routes(httplib::Server& svr);
 void register_user_routes(httplib::Server& svr);
 void register_admin_routes(httplib::Server& svr);
 void register_background_routes(httplib::Server& svr);
+void register_announcement_routes(httplib::Server& svr);
 
 static std::string render_template(const std::string& path) {
     ctemplate::Template* tpl = ctemplate::Template::GetTemplate(path, ctemplate::DO_NOT_STRIP);
@@ -46,6 +47,9 @@ static void serve_spa(httplib::Server& svr) {
                 html = ss.str();
             }
         }
+        res.set_header("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.set_header("Pragma", "no-cache");
+        res.set_header("Expires", "0");
         res.set_content(html.empty() ? "<h1>VibeOJ</h1>" : html, "text/html");
     });
 }
@@ -97,6 +101,7 @@ int main() {
     register_user_routes(svr);
     register_admin_routes(svr);
     register_background_routes(svr);
+    register_announcement_routes(svr);
 
     serve_spa(svr);
 

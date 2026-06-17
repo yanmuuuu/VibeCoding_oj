@@ -1,3 +1,14 @@
+function brandMascotHtml(size) {
+    var w = size || 36;
+    return '<svg class="brand-mascot auth-mascot" width="' + w + '" height="' + w + '" viewBox="0 0 32 32" aria-hidden="true">' +
+        '<ellipse cx="16" cy="20" rx="11" ry="9" fill="#fcd9b8"/>' +
+        '<path d="M7 14 L10 20 L5 19 Z" fill="#fcd9b8"/>' +
+        '<path d="M25 14 L22 20 L27 19 Z" fill="#fcd9b8"/>' +
+        '<circle cx="12" cy="19" r="1.8" fill="#1a1028"/>' +
+        '<circle cx="20" cy="19" r="1.8" fill="#1a1028"/>' +
+        '<ellipse cx="16" cy="22" rx="2.2" ry="1.3" fill="#d4af37"/>' +
+        '</svg>';
+}
 function $(sel) { return document.querySelector(sel); }
 function $$(sel) { return document.querySelectorAll(sel); }
 function el(tag, attrs, ...children) {
@@ -17,7 +28,32 @@ function formatDate(d) {
     return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0') + ' ' + String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0');
 }
 function difficultyBadge(difficulty) {
-    const map = { '简单': { bg: '#e6f7e9', color: '#237804', border: '#b7eb8f' }, '中等': { bg: '#fff7e6', color: '#ad6800', border: '#ffd591' }, '困难': { bg: '#fff1f0', color: '#a8071a', border: '#ffa39e' } };
-    const s = map[difficulty] || { bg: '#f0f0f0', color: '#595959', border: '#d9d9d9' };
-    return `<span style="display:inline-block;padding:1px 8px;border-radius:3px;font-size:0.78em;font-weight:500;background:${s.bg};color:${s.color};border:1px solid ${s.border};white-space:nowrap;">${difficulty || '简单'}</span>`;
+    const key = { '简单': 'easy', '中等': 'medium', '困难': 'hard' }[difficulty] || 'default';
+    return `<span class="diff-badge diff-${key}">${difficulty || '简单'}</span>`;
+}
+function showToast(message, type, duration) {
+    type = type || 'info';
+    duration = duration || 3200;
+    var container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.setAttribute('aria-live', 'polite');
+        document.body.appendChild(container);
+    }
+    var toast = document.createElement('div');
+    toast.className = 'toast toast-' + type;
+    toast.textContent = message;
+    container.appendChild(toast);
+    requestAnimationFrame(function() { toast.classList.add('toast-show'); });
+    setTimeout(function() {
+        toast.classList.remove('toast-show');
+        setTimeout(function() { toast.remove(); }, 320);
+    }, duration);
+}
+function renderNotFound(main) {
+    main.innerHTML = '<div class="error-page"><h2>404</h2><p>页面不存在</p><a href="#/problems">返回题目列表</a></div>';
+}
+function renderError(main, msg) {
+    main.innerHTML = '<div class="error-page"><h2>出错了</h2><p>' + escapeHtml(msg) + '</p><a href="#/problems">返回题目列表</a></div>';
 }
