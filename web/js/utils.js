@@ -1,12 +1,11 @@
 function brandMascotHtml(size) {
     var w = size || 36;
     return '<svg class="brand-mascot auth-mascot" width="' + w + '" height="' + w + '" viewBox="0 0 32 32" aria-hidden="true">' +
-        '<ellipse cx="16" cy="20" rx="11" ry="9" fill="#fcd9b8"/>' +
-        '<path d="M7 14 L10 20 L5 19 Z" fill="#fcd9b8"/>' +
-        '<path d="M25 14 L22 20 L27 19 Z" fill="#fcd9b8"/>' +
-        '<circle cx="12" cy="19" r="1.8" fill="#1a1028"/>' +
-        '<circle cx="20" cy="19" r="1.8" fill="#1a1028"/>' +
-        '<ellipse cx="16" cy="22" rx="2.2" ry="1.3" fill="#d4af37"/>' +
+        '<path d="M7.5 21 Q7.5 10.5 16 8.5 Q24.5 10.5 24.5 21 L24.5 22.5 Q24.5 24.5 16 24.5 Q7.5 24.5 7.5 22.5 Z" fill="#ead8ec" stroke="#5a4a5c" stroke-width="0.9"/>' +
+        '<circle cx="10.5" cy="18.5" r="2.2" fill="#f0a0b8" opacity="0.55"/>' +
+        '<circle cx="21.5" cy="18.5" r="2.2" fill="#f0a0b8" opacity="0.55"/>' +
+        '<line x1="14.3" y1="15.2" x2="14.3" y2="18.2" stroke="#2a1a28" stroke-width="1.1" stroke-linecap="round"/>' +
+        '<line x1="17.7" y1="15.2" x2="17.7" y2="18.2" stroke="#2a1a28" stroke-width="1.1" stroke-linecap="round"/>' +
         '</svg>';
 }
 function $(sel) { return document.querySelector(sel); }

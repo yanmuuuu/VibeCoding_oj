@@ -49,7 +49,7 @@
 - **题目管理**：列表（含可见/隐藏题目）、批量操作（全选/隐藏/显示/删除）、创建/编辑
 - **录题/编辑题目标程**：录入 C++ 标程代码，系统自动编译运行生成每组输入的期望输出（`POST /api/admin/reference/generate`）
 - **测试用例管理**：增删改查，支持行内编辑（input/expected_output/order_index）
-- **用户管理**：用户列表（分页+搜索）、删除用户、提升/取消管理员权限
+- **用户管理**：用户列表（分页+搜索）、删除用户（级联删除数据库关联记录 + 清理 `web/backgrounds/user_*`、`web/avatars/user_*` 上传文件）、提升/取消管理员权限
 - **系统公告**：管理员可发布/编辑/删除公告，全站可见（`#/announcements` 公共页面）
 - **管理员导航栏**：隐藏「我的」链接，显示：题目 | 公告 | 讨论 | 管理 | 退出
 - **普通用户导航栏**：题目 | 公告 | 讨论 | 我的 | 退出
@@ -62,6 +62,7 @@
 - 服务端 HTTP 异常处理：`set_error_handler` 返回 JSON 格式错误（对 API 消费者友好）；SPA Hash Router 渲染 `#/404` 和 `#/500` 客户端 HTML 错误页
 - 后端错误信息中文化（大部分 API 响应 message 已中文化，少数边缘路径保留英文）
 - 登录页仅提示"用户名或密码错误"，不区分具体原因（防枚举攻击）
+- **网站图标（favicon）**：从 `web/icons/` 目录随机选取一张图片作为浏览器标签页图标；用户向该目录放入图片后刷新页面即可生效
 
 ### 2.7 讨论系统
 - **大讨论区**：全局讨论版块，用户可发帖（纯正文、无标题）、回复（二级嵌套）、点赞
@@ -155,6 +156,8 @@ CREATE TABLE users (
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+> **用户媒体文件存储**：壁纸/头像的图片二进制存于 `web/backgrounds/`、`web/avatars/` 目录；数据库仅保存路径（`background_url` / `avatar_url`）。管理员删除用户时，除 `ON DELETE CASCADE` 清理关联表外，还会删除该用户的 `user_{id}.*` 上传文件（系统默认头像 `at*.webp` 不受影响）。
 
 ### 5.2 sessions
 ```sql
@@ -377,7 +380,7 @@ CREATE TABLE comment_likes (
 | DELETE | `/api/admin/questions/:id/testcases/:tc_id` | 删除测试用例 | 需要 + admin |
 | POST | `/api/admin/reference/generate` | 编译运行标程生成期望输出（body: {code, input_data}，多组输入用 \|\|\| 分隔） | 需要 + admin |
 | GET | `/api/admin/users` | 用户列表（分页+搜索，参数: page, search） | 需要 + admin |
-| DELETE | `/api/admin/users/:id` | 删除用户 | 需要 + admin |
+| DELETE | `/api/admin/users/:id` | 删除用户（级联删除 sessions/submissions/讨论/评论等关联数据；删除 `web/backgrounds/user_{id}.*` 与 `web/avatars/user_{id}.*` 上传文件） | 需要 + admin |
 | PUT | `/api/admin/users/:id/admin` | 提升/取消管理员（body: {is_admin: bool}） | 需要 + admin |
 | GET | `/api/admin/announcements` | 公告列表（管理员视图） | 需要 + admin |
 | POST | `/api/admin/announcements` | 发布公告 | 需要 + admin |
@@ -418,6 +421,13 @@ CREATE TABLE comment_likes (
 | DELETE | `/api/problems/:id/comments/:cid/like` | 取消点赞 | 需要 |
 | POST | `/api/problems/:id/comments/:cid/replies/:rid/like` | 点赞回复 | 需要 |
 | DELETE | `/api/problems/:id/comments/:cid/replies/:rid/like` | 取消点赞 | 需要 |
+
+### 6.10 网站图标
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|---|---|---|---|
+| GET | `/api/icons` | 获取系统网站图标列表（无需登录；返回 `web/icons/` 下所有图片路径数组） | 无 |
+| GET | `/favicon.ico` | 浏览器默认 favicon 请求；从 `web/icons/` 随机选取一张图片返回（目录为空时 404） | 无 |
 
 ---
 
@@ -546,9 +556,10 @@ MioOJ/
 │   │   ├── problem.cpp               # 题目列表（仅 is_visible=1）、题目详情
 │   │   ├── submission.cpp            # 提交代码 → 入库 → 投递判题引擎、结果查询
 │   │   ├── user.cpp                  # 个人资料、提交历史（分页）
-│   │   ├── admin.cpp                 # 题目 CRUD + 测试用例 CRUD + 统计 + 批量操作 + 标程生成 + 用户管理（admin 鉴权）
+│   │   ├── admin.cpp                 # 题目 CRUD + 测试用例 CRUD + 统计 + 批量操作 + 标程生成 + 用户管理（含删用户时清理上传文件）
 │   │   ├── announcement.cpp          # 公告 CRUD（管理员/公开）
 │   │   ├── background.cpp             # 背景图片管理：系统相册列表、上传、删除
+│   │   ├── icon.cpp                   # 网站图标管理：系统图标列表、随机 favicon 服务
 │   │   ├── avatar.cpp                 # 头像管理：默认头像随机分配、上传、删除
 │   │   ├── discussion.cpp              # 大讨论：帖子 CRUD + 回复 + 点赞（`handler/discussion.cpp`）
 │   │   ├── comment.cpp                 # 题目评论区：评论 CRUD + 回复 + 点赞（`handler/comment.cpp`）
@@ -566,8 +577,9 @@ MioOJ/
 │       └── tmpfile.hpp/.cpp          # 临时文件管理（mkstemps + RAII 自动清理）
 ├── web/                              # 前端静态文件（SPA）
 │   ├── backgrounds/                   # 背景相册目录（用户可放入图片，自动虚化作为随机背景）
+│   ├── icons/                         # 网站图标目录（用户可放入图片，随机选取作为 favicon）
 │   ├── avatars/                       # 头像目录：系统默认头像 (at*.webp) + 用户自定义头像 (user_*.*)
-│   ├── index.html                    # SPA 入口（ctemplate 渲染 → Hash Router 接管，含 ACE CDN 引入）
+│   ├── index.html                    # SPA 入口（ctemplate 渲染 → Hash Router 接管，含 ACE CDN 引入；页面加载时随机设置 favicon）
 │   ├── css/
 │   │   └── style.css                 # 全局样式（LeetCode 风格简约浅色主题）
 │   └── js/
@@ -604,6 +616,7 @@ MioOJ/
 >   - **LeetCode 经典白模式**：纯白/浅灰配色，白色背景 (#f7f8fa)，无毛玻璃效果，面板使用纯白卡片+浅灰边框，**不显示金边镶嵌**。
 >   - 品牌 Logo：**MioOJ** + 可爱猫耳吉祥物 SVG；设置面板开关为青蓝→浅粉长条样式（与黑金主色并存）。
 >   - 支持用户通过设置面板上传自定义背景图（存储到 `web/backgrounds/` 目录），上传前弹出 Canvas 裁剪对话框。
+>   - **网站图标**：从 `web/icons/` 目录随机选取一张图片作为浏览器标签页 favicon（每次刷新随机；建议 32×32 或 64×64 正方形 ICO/PNG 等格式）。
 
 ### 设计 Token（相册模式）
 
@@ -986,7 +999,6 @@ MioOJ/
 - [ ] 判题引擎编译阶段未检查二进制文件大小（Spec 要求 ≤ 50MB）
 - [ ] `submission.cpp`/`problem.cpp`/`user.cpp` handler 缺少外层 try/catch，异常可能传播到 cpp-httplib 导致空响应
 - [ ] 部分 API 边缘路径错误消息仍为英文（如空 body 检测、404 not found 等）
-- [ ] 方块网格 "7个/行" 未在 CSS 中硬约束，实际由 flexbox 容器宽度决定（900px 下约 9-10 个/行）
 - [ ] 测试用例完整列表只对管理员可见（公开样例来自 `questions.sample_input`/`sample_output`）
 - [ ] 判题引擎早期停止机制：首个非 AC 结果后不再运行剩余测试点，用户需多次提交查看后续失败详情
 
@@ -1102,6 +1114,20 @@ MioOJ/
 - [x] `style_v2.css`：讨论卡片/帖子详情/评论/回复/点赞/问题 Tab/Markdown 渲染 6 套样式（相册+白模式双主题）
 - [x] BUILD PASS：编译通过，0 error 0 warning
 
+### Phase 25 — 网站图标系统 ✅
+- [x] 创建 `web/icons/` 图标目录，支持用户放入 ICO/PNG/JPG/JPEG/WebP/GIF/SVG 图片（`web/icons/README.txt`）
+- [x] 后端 `GET /api/icons`：列出 `web/icons/` 下所有图标文件路径（`handler/icon.cpp`）
+- [x] 后端 `GET /favicon.ico`：从 `web/icons/` 随机选取一张图片返回，按扩展名设置正确 Content-Type（`handler/icon.cpp`）
+- [x] `main.cpp` 注册 `register_icon_routes`
+- [x] 前端 `index.html`：页面加载时请求 `/api/icons`，随机设置 `<link rel="icon">`；默认 href 回退 `/favicon.ico`
+- [x] BUILD PASS：编译通过，0 error
+
+### Phase 26 — 删除用户时清理上传文件 ✅
+- [x] 管理员 `DELETE /api/admin/users/:id`：删除用户前先读取 `background_url` / `avatar_url`，删除对应 `user_*` 上传文件（`handler/admin.cpp`）
+- [x] 兜底扫描 `web/backgrounds/`、`web/avatars/` 下 `user_{id}.*` 文件并删除，避免历史孤儿文件残留
+- [x] 系统默认资源不受影响：系统壁纸（非 `user_*`）、系统默认头像（`at*.webp`）保留
+- [x] BUILD PASS：编译通过，0 error
+
 ## 12. 验收标准
 
 | 编号 | 验收项 | 标准 |
@@ -1150,7 +1176,7 @@ MioOJ/
 | AC-39 | 题目批量操作 | 管理员可在题目管理 Tab 全选题目，批量执行隐藏/显示/删除操作 |
 | AC-40 | 测试用例行内编辑 | 在题目编辑页点击测试用例行的「编辑」按钮，行内切换为编辑模式，可修改 input/expected_output/order_index，点击「保存」提交更新 |
 | AC-41 | 标程自动生成期望输出 | 在题目编辑页粘贴 C++ 标程代码，点击「编译运行，生成期望输出」→ 后端编译运行标程对每组输入生成输出 → 自动填充到对应测试用例的 expected_output |
-| AC-42 | 用户管理 | 管理员在用户管理 Tab 查看分页用户列表（含搜索），可删除用户、提升/取消管理员权限 |
+| AC-42 | 用户管理 | 管理员在用户管理 Tab 查看分页用户列表（含搜索），可删除用户、提升/取消管理员权限；删除用户时级联清理数据库关联数据及 `user_{id}.*` 上传文件 |
 | AC-43 | 系统公告 | 管理员可在公告管理 Tab 发布/编辑/删除公告；任何用户访问 `#/announcements` 查看所有公告（置顶优先） |
 | AC-44 | 管理员导航栏 | 管理员导航栏不显示「我的」，显示：题目 \| 公告 \| 管理 \| 退出 |
 | AC-45 | 管理员 Tab 导航 | 管理页顶部四个 Tab（统计/题目管理/用户管理/公告管理），点击切换对应的管理模块 |
@@ -1174,6 +1200,9 @@ MioOJ/
 | AC-66 | 讨论分页 | 讨论列表和回复列表分页加载（20条/页） |
 | AC-67 | 题目讨论 Tab | 题目详情页展示「题目描述」和「讨论」两个 Tab，切换流畅 |
 | AC-68 | 讨论导航 | 导航栏「讨论」链接跳转 `#/discussions`，当前页高亮 |
+| AC-69 | 随机网站图标 | 向 `web/icons/` 放入至少一张图片后，刷新页面浏览器标签页显示随机选取的 favicon |
+| AC-70 | favicon API | `GET /api/icons` 无需登录，返回图标路径数组；`GET /favicon.ico` 随机返回目录中的一张图片 |
+| AC-71 | 删用户清文件 | 管理员删除用户后，该用户在 `web/backgrounds/`、`web/avatars/` 下的 `user_{id}.*` 上传文件被删除；系统默认壁纸/头像不受影响 |
 
 ---
 

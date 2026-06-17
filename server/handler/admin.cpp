@@ -8,6 +8,40 @@
 #include <sstream>
 #include <string>
 #include <cstdlib>
+#include <filesystem>
+
+namespace fs = std::filesystem;
+
+static void remove_user_uploaded_file(const std::string& url) {
+    if (url.empty()) return;
+    if (url.find("/backgrounds/user_") != 0 && url.find("/avatars/user_") != 0) return;
+    std::string path = g_config.web_root + url;
+    try {
+        if (fs::exists(path)) {
+            fs::remove(path);
+        }
+    } catch (...) {}
+}
+
+static void remove_user_uploaded_files_by_id(int uid) {
+    std::string prefix = "user_" + std::to_string(uid) + ".";
+    const char* dirs[] = {"/backgrounds", "/avatars"};
+    for (const char* dir : dirs) {
+        std::string dir_path = g_config.web_root + dir;
+        try {
+            if (!fs::exists(dir_path) || !fs::is_directory(dir_path)) continue;
+            for (const auto& entry : fs::directory_iterator(dir_path)) {
+                if (!entry.is_regular_file()) continue;
+                std::string fname = entry.path().filename().string();
+                if (fname.size() >= prefix.size() && fname.compare(0, prefix.size(), prefix) == 0) {
+                    try {
+                        fs::remove(entry.path());
+                    } catch (...) {}
+                }
+            }
+        } catch (...) {}
+    }
+}
 
 static bool check_admin(const httplib::Request& req, httplib::Response& res) {
     AuthUser user = authenticate(req);
@@ -556,12 +590,32 @@ void register_admin_routes(httplib::Server& svr) {
         int uid = std::stoi(req.matches[1]);
 
         auto db = g_db->acquire();
-        db->query("DELETE FROM users WHERE id=" + std::to_string(uid));
-        if (db->affected_rows() == 0) {
+
+        std::string bg_url;
+        std::string av_url;
+        db->query("SELECT background_url, avatar_url FROM users WHERE id=" + std::to_string(uid));
+        MYSQL_RES* result = db->store_result();
+        if (!result) {
             res.status = 404;
             res.set_content("{\"error\":\"用户不存在\"}", "application/json");
             return;
         }
+        MYSQL_ROW row = mysql_fetch_row(result);
+        if (!row) {
+            mysql_free_result(result);
+            res.status = 404;
+            res.set_content("{\"error\":\"用户不存在\"}", "application/json");
+            return;
+        }
+        if (row[0]) bg_url = row[0];
+        if (row[1]) av_url = row[1];
+        mysql_free_result(result);
+
+        remove_user_uploaded_file(bg_url);
+        remove_user_uploaded_file(av_url);
+        remove_user_uploaded_files_by_id(uid);
+
+        db->query("DELETE FROM users WHERE id=" + std::to_string(uid));
         res.set_content("{\"ok\":true}", "application/json");
     });
 

@@ -23,6 +23,7 @@ void register_submission_routes(httplib::Server& svr);
 void register_user_routes(httplib::Server& svr);
 void register_admin_routes(httplib::Server& svr);
 void register_background_routes(httplib::Server& svr);
+void register_icon_routes(httplib::Server& svr);
 void register_announcement_routes(httplib::Server& svr);
 void register_avatar_routes(httplib::Server& svr);
 void register_discussion_routes(httplib::Server& svr);
@@ -107,6 +108,7 @@ int main() {
     register_user_routes(svr);
     register_admin_routes(svr);
     register_background_routes(svr);
+    register_icon_routes(svr);
     register_announcement_routes(svr);
     register_avatar_routes(svr);
     register_discussion_routes(svr);
