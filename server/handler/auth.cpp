@@ -3,6 +3,7 @@
 #include "../middleware/auth.hpp"
 #include "../util/crypto.hpp"
 #include "../util/json_extract.hpp"
+#include "../util/logger.hpp"
 #include <string>
 #include <vector>
 #include <filesystem>
@@ -104,6 +105,7 @@ void register_auth_routes(httplib::Server& svr) {
                 return;
             }
 
+            LOG_INFO("User registered: " + username);
             res.status = 201;
             res.set_content("{\"ok\":true}", "application/json");
         } catch (const std::exception& e) {
@@ -153,12 +155,14 @@ void register_auth_routes(httplib::Server& svr) {
             if (is_banned) {
                 res.status = 403;
                 res.set_content("{\"error\":\"账号已被封禁\"}", "application/json");
+                LOG_WARNING("Banned user login attempt: " + db_username + " (id=" + std::to_string(user_id) + ")");
                 return;
             }
 
             if (!verify_password(password, hash)) {
                 res.status = 401;
                 res.set_content("{\"error\":\"用户名或密码错误\"}", "application/json");
+                LOG_WARNING("Login failed for user: " + db_username + " (password mismatch)");
                 return;
             }
 
@@ -168,6 +172,8 @@ void register_auth_routes(httplib::Server& svr) {
                       std::to_string(user_id) + ", '" + escaped_token + "')");
 
             res.set_header("Set-Cookie", "token=" + token + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400");
+
+            LOG_INFO("User login: " + db_username + " (id=" + std::to_string(user_id) + ")");
 
             std::string resp = "{\"ok\":true,\"username\":\"" + json_escape(db_username) +
                                "\",\"is_admin\":" + (is_admin ? "true" : "false") + "}";
@@ -206,6 +212,8 @@ void register_auth_routes(httplib::Server& svr) {
 
             res.set_header("Set-Cookie", "token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0");
             res.set_content("{\"ok\":true}", "application/json");
+
+            LOG_INFO("User logout: " + user.username + " (id=" + std::to_string(user.id) + ")");
         } catch (const std::exception& e) {
             res.status = 500;
             res.set_content("{\"error\":\"" + json_escape(std::string(e.what())) + "\"}", "application/json");

@@ -1,5 +1,6 @@
 #include "compiler.hpp"
 #include "../util/tmpfile.hpp"
+#include "../util/logger.hpp"
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -13,11 +14,13 @@ CompileResult compile_code(const std::string& code, const std::string& tmp_dir, 
     TmpFile src(tmp_dir, "oj_", ".cpp");
     if (!src.valid()) {
         result.error = "Failed to create source temp file";
+        LOG_ERROR("Compile: failed to create source temp file");
         return result;
     }
     // Write code to temp file
     if (write(src.fd(), code.c_str(), code.size()) < 0) {
         result.error = "Failed to write source code";
+        LOG_ERROR("Compile: failed to write source code to temp file");
         return result;
     }
     src.close();
@@ -81,11 +84,13 @@ CompileResult compile_code(const std::string& code, const std::string& tmp_dir, 
 
         if (timed_out) {
             result.error = "Compilation timed out";
+            LOG_WARNING("Compile: timed out after " + std::to_string(timeout_sec) + "s");
             return result;
         }
 
         if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
             result.error = stderr_output.empty() ? "Compilation failed" : stderr_output;
+            LOG_WARNING("Compile: failed - " + result.error);
             return result;
         }
 
@@ -93,14 +98,17 @@ CompileResult compile_code(const std::string& code, const std::string& tmp_dir, 
         struct stat st;
         if (stat(bin_path.c_str(), &st) != 0) {
             result.error = "Binary not found after compilation";
+            LOG_ERROR("Compile: binary not found at " + bin_path + " after successful compilation");
             return result;
         }
 
         result.success = true;
         result.binary_path = bin_path;
+        LOG_DEBUG("Compile: success -> " + bin_path + " (" + std::to_string(st.st_size) + " bytes)");
         return result;
     } else {
         result.error = "fork() failed";
+        LOG_ERROR("Compile: fork() failed");
         return result;
     }
 }

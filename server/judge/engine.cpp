@@ -3,6 +3,7 @@
 #include "runner.hpp"
 #include "../db/pool.hpp"
 #include "../config.hpp"
+#include "../util/logger.hpp"
 #include <mysql/mysql.h>
 #include <unistd.h>
 #include <sstream>
@@ -12,12 +13,14 @@ JudgeEngine::JudgeEngine(size_t workers) : pool_(workers) {}
 
 JudgeEngine::~JudgeEngine() {}
 
-void JudgeEngine::submit(int submission_id, const std::string& code, int question_id,
-                         int time_limit, int memory_limit) {
-    pool_.enqueue([this, submission_id, code, question_id, time_limit, memory_limit] {
-        process(submission_id, code, question_id, time_limit, memory_limit);
-    });
-}
+    // Submit to judge engine
+    void JudgeEngine::submit(int submission_id, const std::string& code, int question_id,
+                             int time_limit, int memory_limit) {
+        LOG_INFO("Judge enqueued: submission #" + std::to_string(submission_id) + " question #" + std::to_string(question_id));
+        pool_.enqueue([this, submission_id, code, question_id, time_limit, memory_limit] {
+            process(submission_id, code, question_id, time_limit, memory_limit);
+        });
+    }
 
 void JudgeEngine::process(int submission_id, const std::string& code, int question_id,
                           int time_limit, int memory_limit) {
@@ -31,6 +34,7 @@ void JudgeEngine::process(int submission_id, const std::string& code, int questi
     if (!comp.success) {
         std::string err = db->escape(comp.error);
         db->query("UPDATE submissions SET status='CE', compile_error='" + err + "', total_count=0, passed_count=0 WHERE id=" + std::to_string(submission_id));
+        LOG_WARNING("Submission #" + std::to_string(submission_id) + " compile error: " + comp.error);
         return;
     }
 
@@ -59,6 +63,7 @@ void JudgeEngine::process(int submission_id, const std::string& code, int questi
     if (test_cases.empty()) {
         unlink(comp.binary_path.c_str());
         db->query("UPDATE submissions SET status='SE' WHERE id=" + std::to_string(submission_id));
+        LOG_ERROR("Submission #" + std::to_string(submission_id) + " SE: no test cases for question #" + std::to_string(question_id));
         return;
     }
 
@@ -111,7 +116,9 @@ void JudgeEngine::process(int submission_id, const std::string& code, int questi
         << "total_memory=" << max_mem << ","
         << "passed_count=" << passed << ","
         << "total_count=" << test_cases.size() << ","
-        << "detail_json='" << detail << "'"
-        << " WHERE id=" << submission_id;
+         << "detail_json='" << detail << "'"
+         << " WHERE id=" << submission_id;
     db->query(sql.str());
+
+    LOG_INFO("Submission #" + std::to_string(submission_id) + " judged: " + final_status + " (" + std::to_string(passed) + "/" + std::to_string(test_cases.size()) + " passed, " + std::to_string(max_time) + "ms, " + std::to_string(max_mem) + "KB)");
 }

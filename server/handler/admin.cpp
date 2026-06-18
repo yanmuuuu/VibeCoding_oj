@@ -6,6 +6,7 @@
 #include "../judge/runner.hpp"
 #include "../config.hpp"
 #include "../util/crypto.hpp"
+#include "../util/logger.hpp"
 #include <sstream>
 #include <string>
 #include <cstdlib>
@@ -237,6 +238,7 @@ void register_admin_routes(httplib::Server& svr) {
             << time_limit << ", " << memory_limit << ", 0)";
         db->query(sql.str());
         int new_id = db->last_insert_id();
+        LOG_INFO("Admin: question #" + std::to_string(new_id) + " created (title: " + title + ")");
         res.status = 201;
         res.set_content("{\"ok\":true,\"id\":" + std::to_string(new_id) + "}", "application/json");
     });
@@ -319,6 +321,7 @@ void register_admin_routes(httplib::Server& svr) {
 
         sql << " WHERE id=" << qid;
         db->query(sql.str());
+        LOG_INFO("Admin: question #" + std::to_string(qid) + " edited (visible: " + (vis ? "true" : "false") + ")");
         res.set_content("{\"ok\":true}", "application/json");
     });
 
@@ -334,6 +337,7 @@ void register_admin_routes(httplib::Server& svr) {
             res.set_content("{\"error\":\"Question not found\"}", "application/json");
             return;
         }
+        LOG_INFO("Admin: question #" + std::to_string(qid) + " deleted");
         res.set_content("{\"ok\":true}", "application/json");
     });
 
@@ -639,6 +643,7 @@ void register_admin_routes(httplib::Server& svr) {
         } else {
             db->query("UPDATE questions SET is_visible=0 WHERE id IN (" + ids_str + ")");
         }
+        LOG_INFO("Admin: batch operation '" + action + "' on questions [" + ids_str + "]");
         res.set_content("{\"ok\":true}", "application/json");
     });
 
@@ -807,6 +812,7 @@ void register_admin_routes(httplib::Server& svr) {
         remove_user_uploaded_files_by_id(uid);
 
         db->query("DELETE FROM users WHERE id=" + std::to_string(uid));
+        LOG_INFO("Admin: user #" + std::to_string(uid) + " deleted");
         res.set_content("{\"ok\":true}", "application/json");
     });
 
@@ -823,6 +829,7 @@ void register_admin_routes(httplib::Server& svr) {
             res.set_content("{\"error\":\"用户不存在\"}", "application/json");
             return;
         }
+        LOG_INFO("Admin: user #" + std::to_string(uid) + " admin status changed to " + (set_admin ? "true" : "false"));
         res.set_content("{\"ok\":true}", "application/json");
     });
 
@@ -841,6 +848,7 @@ void register_admin_routes(httplib::Server& svr) {
         if (banned) {
             db->query("DELETE FROM sessions WHERE user_id=" + std::to_string(uid));
         }
+        LOG_INFO("Admin: user #" + std::to_string(uid) + " ban status changed to " + (banned ? "true" : "false"));
         res.set_content("{\"ok\":true}", "application/json");
     });
 
@@ -863,6 +871,7 @@ void register_admin_routes(httplib::Server& svr) {
             return;
         }
         db->query("DELETE FROM sessions WHERE user_id=" + std::to_string(uid));
+        LOG_INFO("Admin: user #" + std::to_string(uid) + " password reset");
         res.set_content("{\"ok\":true}", "application/json");
     });
 

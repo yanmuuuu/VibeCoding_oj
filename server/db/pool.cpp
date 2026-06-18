@@ -1,4 +1,5 @@
 #include "pool.hpp"
+#include "../util/logger.hpp"
 #include <cstring>
 #include <iostream>
 
@@ -37,6 +38,7 @@ DbPool::DbPool(const std::string& host, int port, const std::string& user,
     for (int i = 0; i < size; ++i) {
         MYSQL* conn = mysql_init(nullptr);
         if (!conn) {
+            LOG_ERROR("DB pool: mysql_init() failed for connection " + std::to_string(i));
             throw std::runtime_error("mysql_init failed");
         }
         mysql_options(conn, MYSQL_SET_CHARSET_NAME, "utf8mb4");
@@ -44,15 +46,18 @@ DbPool::DbPool(const std::string& host, int port, const std::string& user,
                                 db.c_str(), port, nullptr, 0)) {
             std::string err = mysql_error(conn);
             mysql_close(conn);
+            LOG_ERROR("DB pool: mysql_real_connect() failed: " + err);
             throw std::runtime_error("MySQL connect failed: " + err);
         }
         if (mysql_query(conn, "SET time_zone = '+08:00'") != 0) {
             std::string err = mysql_error(conn);
             mysql_close(conn);
+            LOG_ERROR("DB pool: SET time_zone failed: " + err);
             throw std::runtime_error("MySQL set time_zone failed: " + err);
         }
         pool_.push(conn);
     }
+    LOG_INFO("DB pool initialized with " + std::to_string(size) + " connections to " + host + ":" + std::to_string(port) + "/" + db);
 }
 
 DbPool::~DbPool() {
@@ -60,6 +65,7 @@ DbPool::~DbPool() {
         mysql_close(pool_.front());
         pool_.pop();
     }
+    LOG_INFO("DB pool destroyed");
 }
 
 std::shared_ptr<DbConn> DbPool::acquire() {

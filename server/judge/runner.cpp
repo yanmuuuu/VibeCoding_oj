@@ -1,6 +1,7 @@
 #include "runner.hpp"
 #include "../util/tmpfile.hpp"
 #include "../config.hpp"
+#include "../util/logger.hpp"
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/time.h>
@@ -27,6 +28,7 @@ RunResult run_single(const std::string& binary_path, const TestCase& tc,
 
     if (!input_file.valid() || !output_file.valid() || !err_file.valid()) {
         result.status = "SE";
+        LOG_ERROR("Runner: failed to create temp files for test case #" + std::to_string(tc.order_index));
         return result;
     }
 
@@ -179,6 +181,7 @@ RunResult run_single(const std::string& binary_path, const TestCase& tc,
         if (output_fd >= 0) close(output_fd);
         if (err_fd >= 0) close(err_fd);
         result.status = "SE";
+        LOG_ERROR("Runner: fork() failed for test case #" + std::to_string(tc.order_index));
     }
 
     return result;

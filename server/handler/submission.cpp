@@ -4,6 +4,7 @@
 #include "../judge/engine.hpp"
 #include "../config.hpp"
 #include "../util/json_extract.hpp"
+#include "../util/logger.hpp"
 #include <string>
 #include <sstream>
 
@@ -64,6 +65,8 @@ void register_submission_routes(httplib::Server& svr) {
         // Submit to judge engine
         g_judge->submit(sub_id, code, question_id, time_limit, memory_limit);
 
+        LOG_INFO("Submission #" + std::to_string(sub_id) + " by user " + user.username + " (id=" + std::to_string(user.id) + ") for question " + std::to_string(question_id));
+
         res.set_content("{\"ok\":true,\"submission_id\":" + std::to_string(sub_id) + "}", "application/json");
     });
 
@@ -99,6 +102,7 @@ void register_submission_routes(httplib::Server& svr) {
             mysql_free_result(result);
             res.status = 403;
             res.set_content("{\"error\":\"Forbidden\"}", "application/json");
+            LOG_WARNING("User " + user.username + " (id=" + std::to_string(user.id) + ") attempted to access submission #" + std::to_string(id) + " owned by user " + std::to_string(owner_id));
             return;
         }
 

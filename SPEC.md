@@ -591,6 +591,7 @@ MioOJ/
 │   └── util/
 │       ├── crypto.hpp/.cpp           # Argon2id 密码哈希、SHA256 Token 生成、OpenSSL 随机数
 │       ├── json_extract.hpp          # 健壮 JSON 字符串/整数提取器（处理空格、转义字符）
+│       ├── logger.hpp               # 日志系统（线程安全、分级、控制台+文件双输出）
 │       └── tmpfile.hpp/.cpp          # 临时文件管理（mkstemps + RAII 自动清理）
 ├── web/                              # 前端静态文件（SPA）
 │   ├── backgrounds/                   # 背景相册目录（用户可放入图片，自动虚化作为随机背景）
@@ -1424,7 +1425,9 @@ struct Config {
     std::string db_user       = "VibeOJUser";
     std::string db_password   = "347191964YM";
     std::string db_name       = "vibeoj";
-    // ...
+    // ... 判题配置 ...
+    std::string log_file      = "";   // 日志文件路径，空 = 仅控制台
+    int         log_level     = 1;    // 0=DEBUG 1=INFO 2=WARNING 3=ERROR
 };
 ```
 
@@ -1444,3 +1447,72 @@ pkg-config --libs openssl
 PKG_CONFIG_PATH=/usr/local/lib/pkgconfig pkg-config --libs libctemplate
 ldconfig -p | grep -E "libargon2|libctemplate"
 ```
+
+---
+
+## 15. 日志系统
+
+### 15.1 概述
+
+`server/util/logger.hpp` 提供了一个 header-only、线程安全的日志系统，支持分级输出至控制台（stdout/stderr）和文件。
+
+### 15.2 日志级别
+
+| 级别 | 枚举值 | 输出目标 | 用途 |
+|---|---|---|---|
+| `DEBUG` | 0 | stdout + 文件 | 调试信息（Auth 细节、编译路径等） |
+| `INFO` | 1 (默认) | stdout + 文件 | 常规操作（登录、提交、CRUD 操作） |
+| `WARNING` | 2 | stderr + 文件 | 警告（登录失败、编译错误、权限拒绝） |
+| `ERROR` | 3 | stderr + 文件 | 严重错误（连接失败、fork 失败、系统异常） |
+
+### 15.3 日志格式
+
+```
+[2026-06-17 23:15:30.123] [INFO ] [main.cpp:42] MioOJ server starting...
+[2026-06-17 23:15:31.456] [WARN ] [auth.cpp:35] Login failed for user: hacker (password mismatch)
+[2026-06-17 23:15:32.789] [ERROR] [engine.cpp:61] Submission #42 SE: no test cases for question #1
+```
+
+格式：`[时间戳] [级别] [文件名:行号] 消息`
+
+时间戳精度为毫秒，级别固定宽度 5 字符。
+
+### 15.4 配置
+
+在 `server/config.hpp` 中配置：
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `log_file` | `std::string` | `""` | 日志文件路径，空字符串 = 仅控制台输出 |
+| `log_level` | `int` | `1` | 最低输出级别：0=DEBUG 1=INFO 2=WARNING 3=ERROR |
+
+### 15.5 日志覆盖点
+
+| 模块 | 记录内容 |
+|---|---|
+| **启动/关闭** (`main.cpp`) | 服务启动/停止、临时目录/DB/判题引擎初始化失败 |
+| **认证中间件** (`middleware/auth.cpp`) | Auth 成功（DEBUG）、封禁用户拦截（WARNING）、无 Token（DEBUG） |
+| **认证处理器** (`handler/auth.cpp`) | 注册成功（INFO）、登录成功/失败/封禁（INFO/WARNING）、退出（INFO） |
+| **提交** (`handler/submission.cpp`) | 提交创建（INFO）、越权访问（WARNING） |
+| **管理后台** (`handler/admin.cpp`) | 题目 CRUD（INFO）、批量操作（INFO）、用户管理（INFO） |
+| **判题引擎** (`judge/engine.cpp`) | 入队（INFO）、编译错误（WARNING）、无用例（ERROR）、判题完成（INFO） |
+| **编译模块** (`judge/compiler.cpp`) | 编译成功/超时/失败（DEBUG/WARNING）、二进制大小 |
+| **运行模块** (`judge/runner.cpp`) | fork 失败（ERROR）、临时文件失败（ERROR） |
+| **数据库连接池** (`db/pool.cpp`) | 连接池初始化/销毁（INFO）、连接失败（ERROR） |
+
+### 15.6 使用示例
+
+```cpp
+#include "util/logger.hpp"
+
+LOG_DEBUG("Processing request for user_id=" + std::to_string(uid));
+LOG_INFO("User " + username + " logged in");
+LOG_WARNING("Rate limit exceeded for IP " + ip);
+LOG_ERROR("Failed to connect to database: " + std::string(e.what()));
+```
+
+宏 `LOG_DEBUG/INFO/WARNING/ERROR` 自动携带 `__FILE__` 和 `__LINE__` 信息。
+
+### 15.7 线程安全
+
+`Logger` 为单例模式，所有写操作使用 `std::mutex` 保护，支持多线程并发写入（判题线程池 + HTTP 请求线程并行场景）。

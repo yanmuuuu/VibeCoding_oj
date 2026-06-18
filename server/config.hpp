@@ -16,6 +16,8 @@ struct Config {
     int         default_memory_limit = 256;
     int         compile_timeout      = 10;
     int         max_binary_size      = 50 * 1024 * 1024;
+    std::string log_file            = "";        // empty = console only
+    int         log_level           = 1;         // 0=DEBUG 1=INFO 2=WARNING 3=ERROR
 };
 
 extern Config g_config;

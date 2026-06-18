@@ -13,6 +13,7 @@
 #include "middleware/auth.hpp"
 #include "judge/engine.hpp"
 #include "util/tmpfile.hpp"
+#include "util/logger.hpp"
 
 Config g_config;
 JudgeEngine* g_judge = nullptr;
@@ -65,9 +66,16 @@ int main() {
     signal(SIGPIPE, SIG_IGN);
     srand(static_cast<unsigned int>(time(nullptr)));
 
+    // Init logger
+    Logger::instance().set_min_level(static_cast<LogLevel>(g_config.log_level));
+    if (!g_config.log_file.empty()) {
+        Logger::instance().set_log_file(g_config.log_file);
+    }
+    LOG_INFO("MioOJ server starting...");
+
     // Init temp directory
     if (!init_tmp_dir(g_config.tmp_dir)) {
-        std::cerr << "Failed to create temp directory: " << g_config.tmp_dir << std::endl;
+        LOG_ERROR("Failed to create temp directory: " + g_config.tmp_dir);
         return 1;
     }
 
@@ -76,12 +84,13 @@ int main() {
         g_db = new DbPool(g_config.db_host, g_config.db_port, g_config.db_user,
                           g_config.db_password, g_config.db_name, g_config.db_pool_size);
     } catch (const std::exception& e) {
-        std::cerr << "Database connection failed: " << e.what() << std::endl;
+        LOG_ERROR("Database connection failed: " + std::string(e.what()));
         return 1;
     }
 
     // Init judge engine
     g_judge = new JudgeEngine(g_config.judge_workers);
+    LOG_INFO("Judge engine started with " + std::to_string(g_config.judge_workers) + " workers");
 
     httplib::Server svr;
 
@@ -116,9 +125,11 @@ int main() {
 
     serve_spa(svr);
 
+    LOG_INFO("MioOJ Server running on http://0.0.0.0:" + std::to_string(g_config.port));
     std::cout << "VibeOJ Server running on http://0.0.0.0:" << g_config.port << std::endl;
     svr.listen("0.0.0.0", g_config.port);
 
+    LOG_INFO("MioOJ Server shut down");
     delete g_judge;
     delete g_db;
     return 0;
