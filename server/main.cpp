@@ -14,6 +14,7 @@
 #include "judge/engine.hpp"
 #include "util/tmpfile.hpp"
 #include "util/logger.hpp"
+#include "util/config_loader.hpp"
 
 Config g_config;
 JudgeEngine* g_judge = nullptr;
@@ -67,6 +68,13 @@ int main() {
     // Ignore SIGPIPE to prevent crashes when clients disconnect mid-response
     signal(SIGPIPE, SIG_IGN);
     srand(static_cast<unsigned int>(time(nullptr)));
+
+    load_config_from_env(g_config);
+    if (g_config.db_password.empty()) {
+        std::cerr << "VIBEOJ_DB_PASSWORD is not set. Copy deploy/config.example.env to deploy/local.env "
+                     "or deploy/production.env and fill in credentials.\n";
+        return 1;
+    }
 
     // Init logger
     Logger::instance().set_min_level(static_cast<LogLevel>(g_config.log_level));

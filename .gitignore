@@ -1,0 +1,19 @@
+# 敏感配置（勿提交）
+deploy/local.env
+deploy/production.env
+deploy/ssl/*.pem
+deploy/ssl/*.key
+deploy/ssl/*.crt
+
+# 编译产物
+/vibeoj
+/server/**/*.o
+/build/
+
+# 运行日志
+/logs/
+*.log
+
+# 编辑器
+.vscode/
+.idea/

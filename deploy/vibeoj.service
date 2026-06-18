@@ -1,0 +1,15 @@
+[Unit]
+Description=MioOJ Online Judge (vibeoj)
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/user1/VibeCoding_oj
+ExecStart=/home/user1/VibeCoding_oj/deploy/start.sh
+Restart=on-failure
+RestartSec=5
+Environment=HOME=/home/user1
+
+[Install]
+WantedBy=default.target

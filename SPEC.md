@@ -1469,22 +1469,22 @@ sudo systemctl start mysql
 
 sudo mysql <<EOF
 CREATE DATABASE IF NOT EXISTS vibeoj DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'VibeOJUser'@'localhost' IDENTIFIED BY '347191964YM';
+CREATE USER IF NOT EXISTS 'VibeOJUser'@'localhost' IDENTIFIED BY 'YOUR_DB_PASSWORD';
 GRANT ALL PRIVILEGES ON vibeoj.* TO 'VibeOJUser'@'localhost';
 FLUSH PRIVILEGES;
 EOF
 
-# 导入表结构
-mysql -u VibeOJUser -p347191964YM vibeoj < server/db/schema.sql
+# 导入表结构（将 YOUR_DB_PASSWORD 换成实际密码，或改用 mysql -p 交互输入）
+mysql -u VibeOJUser -p vibeoj < server/db/schema.sql
 
 # 导入种子数据（2 道例题 + 15 个测试点）
-mysql -u VibeOJUser -p347191964YM vibeoj < server/db/seed.sql
+mysql -u VibeOJUser -p vibeoj < server/db/seed.sql
 
 # 导入 Phase 13 迁移（私信/消息表）
-mysql -u VibeOJUser -p347191964YM vibeoj < server/db/migrate_phase13.sql
+mysql -u VibeOJUser -p vibeoj < server/db/migrate_phase13.sql
 
 # 导入 Phase 30 迁移（私信撤回 is_recalled 字段）
-mysql -u VibeOJUser -p347191964YM vibeoj < server/db/migrate_phase30.sql
+mysql -u VibeOJUser -p vibeoj < server/db/migrate_phase30.sql
 
 # =============================================
 # 步骤 4: 编译项目
@@ -1527,19 +1527,31 @@ make run    # 自动创建 /tmp/oj 临时目录并启动
 
 ### 14.7 配置说明
 
-编辑 `server/config.hpp` 修改数据库连接参数：
+敏感信息（数据库密码等）**不要**写进 `config.hpp` 或提交 Git。使用环境变量文件：
+
+```bash
+cp deploy/config.example.env deploy/local.env    # 本地测试
+# 编辑 deploy/local.env，填写 VIBEOJ_DB_PASSWORD
+
+make run-local   # 本地启动（读 deploy/local.env）
+```
+
+生产环境在服务器上维护 `deploy/production.env`（已加入 `.gitignore`），示例字段：
+
+```bash
+VIBEOJ_DB_PASSWORD=your_password_here
+DOMAIN=rinr.top
+PUBLIC_IP=your.public.ip.here
+```
+
+`server/config.hpp` 仅保留非敏感默认值；启动时由 `load_config_from_env()` 覆盖：
 
 ```cpp
 struct Config {
     int         port          = 8080;
     std::string db_host       = "127.0.0.1";
-    int         db_port       = 3306;
-    std::string db_user       = "VibeOJUser";
-    std::string db_password   = "347191964YM";
-    std::string db_name       = "vibeoj";
-    // ... 判题配置 ...
-    std::string log_file      = "";   // 日志文件路径，空 = 仅控制台
-    int         log_level     = 1;    // 0=DEBUG 1=INFO 2=WARNING 3=ERROR
+    std::string db_password   = "";   // 来自 VIBEOJ_DB_PASSWORD
+    // ...
 };
 ```
 
