@@ -21,6 +21,21 @@ function escapeHtml(s) {
     s = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     return s;
 }
+function userProfilePath(userId) {
+    if (!userId) return '#/user';
+    if (typeof App !== 'undefined' && App.user && App.user.id === userId) return '#/user';
+    return '#/users/' + userId;
+}
+function attachUserProfileNav(element, userId, stopPropagation) {
+    if (!element || !userId) return;
+    element.classList.add('user-profile-link');
+    element.style.cursor = 'pointer';
+    element.setAttribute('title', '查看主页');
+    element.addEventListener('click', function(e) {
+        if (stopPropagation) e.stopPropagation();
+        App.navigate(userProfilePath(userId));
+    });
+}
 function formatDate(d) {
     if (!d) return '';
     const s = d.trim().replace(' ', 'T');

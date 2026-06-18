@@ -38,10 +38,14 @@ async function renderDiscussions(main) {
 
             list.forEach(d => {
                 const preview = d.content.length > 100 ? d.content.slice(0, 100).replace(/\n/g, ' ') + '...' : d.content.replace(/\n/g, ' ');
+                const avatar = el('img', {className: 'discussion-avatar', src: d.avatar_url || '', alt: ''});
+                const username = el('span', {className: 'discussion-username', textContent: d.username});
+                attachUserProfileNav(avatar, d.user_id, true);
+                attachUserProfileNav(username, d.user_id, true);
                 const card = el('div', {className: 'discussion-card'},
                     el('div', {className: 'discussion-card-header'},
-                        el('img', {className: 'discussion-avatar', src: d.avatar_url || '', alt: ''}),
-                        el('span', {className: 'discussion-username', textContent: d.username}),
+                        avatar,
+                        username,
                         el('span', {className: 'discussion-time', textContent: formatDate(d.created_at)})
                     ),
                     el('div', {className: 'discussion-card-preview', textContent: preview}),

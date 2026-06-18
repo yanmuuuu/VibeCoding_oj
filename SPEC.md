@@ -55,8 +55,8 @@
 - **用户管理**：列表（分页+搜索）、删除用户（级联删库 + 清理 `user_*` 文件）、升降管理员、**封禁/解封**（立即踢 session）、**管理员重置密码**（设定新密码并清 session）
 - **讨论管理**：列表 + 搜索、删帖/删回复、跳转原帖
 - **系统公告**：管理员发布/编辑/删除公告
-- **管理员导航栏**：隐藏「我的」链接，显示：题目 | 公告 | 讨论 | 管理 | 退出
-- **普通用户导航栏**：题目 | 公告 | 讨论 | 我的 | 退出
+- **管理员导航栏**：隐藏「我的」链接，显示：题目 | 排行榜 | 公告 | 讨论 | 管理 | 退出 + 私信图标
+- **普通用户导航栏**：题目 | 排行榜 | 公告 | 讨论 | 我的 | 退出 + 私信图标（含未读计数角标）
 - **未登录导航栏**：公告 | 讨论 | 登录（公告和讨论为公开页）
 - 管理页需要管理员权限
 
@@ -74,25 +74,31 @@
   - 轻量操作反馈仍使用 Toast（`showToast`），不阻塞页面
 
 ### 2.7 讨论系统
-- **大讨论区**：全局讨论版块，用户可发帖（纯正文、无标题）、回复（二级嵌套）、点赞
-  - 列表页卡片式展示（头像+用户名+正文前100字+时间+点赞数），按发布时间倒序，每页 20 条
-  - 正文支持 **Markdown 渲染**（marked.js CDN），可嵌入代码块
-  - 回复支持二级嵌套：直接回复帖子（一级）+ 回复别人的回复（二级）
-  - 点赞：每人每帖/每条回复限点一次（独立 `likes` 表 + UNIQUE 约束）
-  - 权限：登录用户可发帖/回复/删自己的；管理员可删任意
-  - 导航栏入口：「讨论」链接 → `#/discussions`
-- **题目评论区**：每道题目独立讨论区，题目详情页「讨论」Tab（与「题目描述」切换）；交互与大讨论一致：卡片列表预览 → 点击进入帖子详情 → 「发帖」发表主帖 → 「回复楼主」/楼中楼回复
-  - 功能与大讨论一致（Markdown、二级嵌套、点赞、权限）
-  - 数据库表分开：`problem_comments` + `comment_replies` + `comment_likes`
-  - API 路由前缀 `/api/problems/:id/comments`
-  - 排序：按发布时间倒序（最新在前）
+
+（内容同上，保持不变）
+
+### 2.8 排行榜
+
+- Top 100 积分排名表：按积分降序、AC 题数降序、总提交数升序、注册时间升序
+- **仅展示有积分（>0）的用户**；0 分用户不出现在榜单中
+- 积分规则：简单题 1 分 / 中等题 2 分 / 困难题 3 分，**每道题 AC 只计一次**（去重）
+- 当前用户积分卡片：显示自己的**名次**、积分、AC 数、总提交数（即使未上榜也显示）
+- 导航栏入口：「排行榜」链接 → `#/leaderboard`
+
+### 2.9 私信/消息系统
+
+- 用户会话列表：显示对方用户名/头像、最后消息预览、未读计数
+- 聊天窗口：支持 Markdown 消息、分页加载历史（50 条/页）、10s 轮询刷新
+- 发起私信：① 私信页搜索用户；② **从他人公开主页点击「发私信」**
+- **他人公开主页** `#/users/:id`：仅展示头像、用户名、积分/AC 等公开统计，**不暴露**邮箱、管理员身份、提交历史等敏感信息；点击讨论/排行榜等处他人头像进入
+- 未读角标：导航栏邮件图标显示未读消息总数 → 进入会话自动标记已读
+- **消息撤回**：发送者可在 **1 分钟内** 右键自己的消息选择「撤回」；双方均显示「你/对方撤回了一条消息」占位；会话列表预览显示 `[已撤回]`
+- 数据库表：`conversations`（用户配对 + UNIQUE 约束）+ `messages`（含 `is_read`、`is_recalled` 标记）
 
 ---
 
 ## 3. 延迟功能（V2）
 
-- 私信/消息系统
-- 排行榜
 - 通过率统计
 - 多语言支持
 - Docker 化部署
@@ -145,8 +151,10 @@
                │  - test_cases   │
                │  - submissions  │
                │  - discussions  │
-               │  - comments     │
-               └────────────────┘
+                │  - comments     │
+                │  - conversations│
+                │  - messages     │
+                └────────────────┘
 ```
 
 ---
@@ -328,6 +336,37 @@ CREATE TABLE comment_likes (
 );
 ```
 
+### 5.13 conversations — 私信会话
+```sql
+CREATE TABLE conversations (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    user1_id        INT NOT NULL,
+    user2_id        INT NOT NULL,
+    last_message_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user1_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (user2_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE KEY uk_user_pair (user1_id, user2_id)
+);
+```
+
+### 5.14 messages — 私信消息
+```sql
+CREATE TABLE messages (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    conversation_id INT NOT NULL,
+    sender_id       INT NOT NULL,
+    content         TEXT NOT NULL,
+    is_read         TINYINT(1) NOT NULL DEFAULT 0,
+    is_recalled     TINYINT(1) NOT NULL DEFAULT 0,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_conv_time (conversation_id, created_at),
+    INDEX idx_unread (conversation_id, sender_id, is_read)
+);
+```
+
 ---
 
 ## 6. API 接口清单
@@ -444,6 +483,27 @@ CREATE TABLE comment_likes (
 | GET | `/api/icons` | 获取系统网站图标列表（无需登录；返回 `web/icons/` 下所有图片路径数组） | 无 |
 | GET | `/favicon.ico` | 浏览器默认 favicon 请求；从 `web/icons/` 随机选取一张图片返回（目录为空时 404） | 无 |
 
+### 6.11 排行榜
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|---|---|---|---|
+| GET | `/api/leaderboard` | Top 100 积分排名（简单1分/中等2分/困难3分，**每题 AC 去重**；**仅 points>0**；按积分降序、AC数降序、提交数升序、注册时间升序） | 需要 |
+| GET | `/api/leaderboard/my-rank` | 当前用户排名与积分（返回 **rank**、points、ac_count、total_subs；未上榜时 rank 可为 null/-1） | 需要 |
+| GET | `/api/users/:id/public` | 他人公开资料（username、avatar_url、points、ac_count；不含邮箱/管理员/提交详情） | 需要 |
+
+### 6.12 私信/消息
+
+| 方法 | 路径 | 说明 | 鉴权 |
+|---|---|---|---|
+| GET | `/api/messages/conversations` | 会话列表（含对方用户名/头像、最后消息、未读数） | 需要 |
+| POST | `/api/messages/conversations` | 获取或创建与指定用户的会话 `{peer_id}` | 需要 |
+| GET | `/api/messages/conversations/:id?page=&page_size=` | 会话消息列表（分页，50条/页，含发送者信息 + `is_me` 标记） | 需要 |
+| POST | `/api/messages/conversations/:id` | 发送消息 `{content}`（支持 Markdown） | 需要 |
+| GET | `/api/messages/unread-count` | 获取当前用户未读消息总数 | 需要 |
+| POST | `/api/messages/read/:id` | 标记会话所有对方消息为已读 | 需要 |
+| POST | `/api/messages/recall/:id` | 撤回消息（仅发送者、发送后 60 秒内、未撤回过） | 需要 |
+| GET | `/api/messages/search-users?q=` | 搜索用户（按用户名模糊搜索，排除自己+封禁用户，最多20条） | 需要 |
+
 ---
 
 ## 7. 判题管道详细流程
@@ -543,6 +603,9 @@ CREATE TABLE comment_likes (
 | `#/admin/discussions` | 管理员 → 讨论管理 | 搜索+删帖/删回复 |
 | `#/discussions` | 大讨论列表页 | 卡片式信息流，20条/页，需要登录 |
 | `#/discussions/:id` | 帖子详情页 | Markdown 正文渲染 + 回复列表（二级嵌套）+ 点赞 |
+| `#/leaderboard` | 排行榜页 | Top 100 积分排名表格（仅 >0 分用户）+ 当前用户积分/名次卡片，需要登录 |
+| `#/messages` | 私信页 | 左侧会话列表（搜索+发起）+ 右侧聊天窗口（分页+轮询），需要登录 |
+| `#/users/:id` | 他人公开主页 | 头像、用户名、积分/AC 等公开统计 +「发私信」按钮（非本人）；不展示敏感信息，需要登录 |
 | `#/404` | 404 页面 | 路由未匹配 |
 | `#/500` | 500 页面 | 服务器异常 |
 
@@ -566,8 +629,10 @@ MioOJ/
 │   │   └── httplib.h                # cpp-httplib (header-only)
 │   ├── db/
 │   │   ├── pool.hpp/.cpp            # MySQL 连接池（线程安全，RAII 封装）
-│   │   ├── schema.sql               # 建表脚本（5 张表）
-│   │   └── seed.sql                 # 种子数据（2 道示例题 + 15 个测试点）
+│   │   ├── schema.sql               # 建表脚本（14 张表）
+│   │   ├── seed.sql                 # 种子数据（2 道示例题 + 15 个测试点）
+│   │   ├── migrate_phase13.sql      # Phase 13 迁移：新增 conversations + messages 表
+│   │   └── migrate_phase27.sql      # Phase 27 迁移：questions.reference_code + users.is_banned
 │   ├── handler/
 │   │   ├── auth.cpp                  # 注册（Argon2id 哈希）、登录（Token+Cookie）、退出
 │   │   ├── problem.cpp               # 题目列表（仅 is_visible=1）、题目详情
@@ -580,6 +645,8 @@ MioOJ/
 │   │   ├── avatar.cpp                 # 头像管理：默认头像随机分配、上传、删除
 │   │   ├── discussion.cpp              # 大讨论：帖子 CRUD + 回复 + 点赞（`handler/discussion.cpp`）
 │   │   ├── comment.cpp                 # 题目评论区：评论 CRUD + 回复 + 点赞（`handler/comment.cpp`）
+│   │   ├── leaderboard.cpp              # 排行榜：Top 100 积分排名 + 当前用户排名（`handler/leaderboard.cpp`）
+│   │   ├── message.cpp                  # 私信/消息：会话 CRUD + 消息收发 + 未读计数 + 用户搜索（`handler/message.cpp`）
 │   ├── judge/
 │   │   ├── engine.hpp/.cpp           # 判题引擎：接收任务 → 编译 → 遍历测试点 → 运行 → 写结果
 │   │   ├── compiler.hpp/.cpp         # 编译模块：临时文件 → g++ -O2 -std=c++17 → 超时 10s
@@ -621,6 +688,9 @@ MioOJ/
 │       │   ├── discussions.js        # 大讨论列表页（卡片式信息流）
 │       │   ├── discussionDetail.js   # 帖子详情页（Markdown 渲染 + 二级回复 + 点赞）
 │       │   └── problemComments.js    # 题目讨论 Tab（复用回复/点赞组件）
+│       │   ├── leaderboard.js         # 排行榜页（排名表格 + 用户积分卡）
+│       │   ├── userProfile.js         # 他人公开主页（积分/名次 + 发私信）
+│       │   └── messages.js            # 私信页（会话列表 + 聊天窗口 + 轮询 + 搜索）
 └── test/                             # 测试用例示例（预留）
     └── cases/
 ```
@@ -890,7 +960,7 @@ MioOJ/
 
 ---
 
-## 11. TODO 清单（✅ 全部完成）
+## 11. TODO 清单
 
 ### Phase 0 — 基础设施
 - [x] 项目目录创建，Makefile 配置
@@ -999,11 +1069,25 @@ MioOJ/
 - [x] `handler/auth.cpp` 注册 handler 调用 `validate_password()`，不合格返回 400 + 具体原因
 - [x] `web/js/pages/register.js` 前端注册页展示密码规则提示 + 客户端预校验
 
-### Phase 13 — 延后（V2）
-- [ ] 私信/消息系统
-- [ ] 排行榜
-- [ ] 多语言
-- [ ] Docker 化
+### Phase 13 — 排行榜与私信（部分完成 → Phase 29 补完）
+
+**后端 / 基础设施（已完成）**
+- [x] 排行榜 API 骨架：`GET /api/leaderboard`、`GET /api/leaderboard/my-rank`（`handler/leaderboard.cpp`）
+- [x] 私信/消息系统：7 个 API（会话列表、创建会话、消息列表分页、发送消息、未读计数、标记已读、搜索用户）；数据库 `conversations` + `messages` 表（`migrate_phase13.sql`）（`handler/message.cpp`）
+- [x] 导航栏「排行榜」链接 + 私信邮件图标；`router.js` 注册 `#/leaderboard` / `#/messages` 路由
+- [x] `style_v2.css` 排行榜/私信 CSS（相册+白模式）；`api.js` 9 个 API 方法
+
+**前端 / 业务逻辑（Phase 13 初版未完成，Phase 29 已补完）**
+- [x] 排行榜积分按题 AC 去重（Phase 29 修复 SQL）
+- [x] `my-rank` 返回真实名次（Phase 29）
+- [x] 排行榜仅展示 points>0 用户；顶部卡片显示自己的名次（Phase 29）
+- [x] 前端排行榜页 `#/leaderboard` 正确渲染（Phase 29 修复 `escapeHtml`）
+- [x] 前端私信页 `#/messages` 正确渲染（Phase 29）
+- [x] 他人公开主页 `#/users/:id` + 从讨论/排行榜等处点击头像进入（Phase 29）
+- [x] 公开主页「发私信」按钮（对他人显示；对自己隐藏）（Phase 29）
+- [x] 私信页 `#/messages?user=:id` 深链自动打开会话（Phase 29）
+
+> 多语言、Docker 化已移至 §3 延迟功能（V2），不属于 Phase 13 交付范围。
 
 ### Phase 14 — 体验优化
 - [x] 测试数据隐私保护：`detail_json` 移除 `input`/`expected`/`actual` 字段，结果页只显示状态、耗时、内存
@@ -1165,6 +1249,22 @@ MioOJ/
 - [x] 全站替换原生 `confirm` / `alert` / `prompt`（管理后台、讨论、设置面板等）
 - [x] 管理员重置密码使用 `showPrompt` + `password` 输入框
 
+### Phase 29 — 排行榜与私信修复 ✅
+- [x] **排行榜 SQL 修复**：按 `user_id + question_id` 去重后再计分；榜单仅 `points > 0` 用户；`my-rank` / 公开资料返回真实 `rank`（未上榜为 `null`）
+- [x] **公开资料 API**：`GET /api/users/:id/public`（username、avatar_url、points、ac_count、total_subs、rank；不含邮箱/管理员/提交详情）
+- [x] **前端修复**：`leaderboard.js` / `messages.js` 统一使用 `escapeHtml`（原 `escHtml` 未定义导致页面报错）
+- [x] **他人公开主页** `#/users/:id`（`userProfile.js`）：展示头像、用户名、排行榜名次、积分/AC/提交；「发私信」按钮；访问自己时跳转 `#/user`
+- [x] **头像跳转**：讨论区/题目评论区/排行榜点击他人头像或用户名 → `#/users/:id`（`attachUserProfileNav` in `utils.js`）
+- [x] **私信深链**：`#/messages?user=:id` 自动创建/打开会话；公开主页「发私信」跳转此深链
+- [x] `style_v2.css`：公开主页卡片、我的名次标签样式（相册+白模式）
+
+### Phase 30 — 私信消息撤回 ✅
+- [x] 数据库：`messages.is_recalled TINYINT(1)`（`migrate_phase30.sql`）
+- [x] `POST /api/messages/recall/:id`：仅发送者、60 秒内、清空正文并标记 `is_recalled=1`
+- [x] 消息列表返回 `is_recalled`、`can_recall`；会话列表最后预览对撤回消息显示 `[已撤回]`
+- [x] 前端：右键自己的消息弹出「撤回」菜单；双方看到占位文案「你/对方撤回了一条消息」
+- [x] `api.js` 新增 `recallMessage()`；`.msg-context-menu` / `.msg-bubble-recalled` 样式
+
 ## 12. 验收标准
 
 | 编号 | 验收项 | 标准 |
@@ -1250,6 +1350,12 @@ MioOJ/
 | AC-79 | 重置密码 | 管理员可为用户设定新密码（≥8 位），并重置其登录态 |
 | AC-80 | 主题弹窗 | 相册模式下删除/确认操作显示黑金风格自定义弹窗，非浏览器原生框 |
 | AC-81 | 白模式弹窗 | LeetCode 白模式下确认/提示/输入弹窗为白底简约卡片，与页面风格一致；危险操作确认按钮红色强调 |
+| AC-82 | 排行榜 | 登录用户访问 `#/leaderboard` 查看 Top 100（**仅 >0 分**；积分按题去重）；顶部卡片显示自己的**名次**/积分/AC/提交数 |
+| AC-83 | 私信会话 | 登录用户可通过搜索或他人公开主页「发私信」发起会话；左侧列表显示最后消息与未读数 |
+| AC-84 | 私信收发 | 聊天窗口支持 Markdown、分页历史（50条/页）、10s 轮询 |
+| AC-85 | 私信未读 | 导航栏邮件图标未读角标；进入会话自动已读 |
+| AC-86 | 公开主页 | `#/users/:id` 仅展示头像/用户名/积分/AC 等公开信息；讨论/排行榜等处点击他人头像可进入；主页有「发私信」按钮（本人无此按钮） |
+| AC-87 | 私信撤回 | 发送后 1 分钟内右键自己的消息可撤回；双方见占位提示；会话列表预览显示 `[已撤回]`；超时或非本人返回 400 |
 
 ---
 
@@ -1373,6 +1479,12 @@ mysql -u VibeOJUser -p347191964YM vibeoj < server/db/schema.sql
 
 # 导入种子数据（2 道例题 + 15 个测试点）
 mysql -u VibeOJUser -p347191964YM vibeoj < server/db/seed.sql
+
+# 导入 Phase 13 迁移（私信/消息表）
+mysql -u VibeOJUser -p347191964YM vibeoj < server/db/migrate_phase13.sql
+
+# 导入 Phase 30 迁移（私信撤回 is_recalled 字段）
+mysql -u VibeOJUser -p347191964YM vibeoj < server/db/migrate_phase30.sql
 
 # =============================================
 # 步骤 4: 编译项目

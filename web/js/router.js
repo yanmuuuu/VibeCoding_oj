@@ -45,6 +45,8 @@ const App = {
         const navProblems = $('#nav-problems');
         const navAnnounce = $('#nav-announcements');
         const navDiscussions = $('#nav-discussions');
+        const navLeaderboard = $('#nav-leaderboard');
+        const navMessages = $('#nav-messages');
         const navAdmin = $('#nav-admin');
         const navUser = $('#nav-user');
         const navLogin = $('#nav-login');
@@ -56,14 +58,19 @@ const App = {
 
         if (this.user) {
             if (navProblems) navProblems.style.display = '';
+            if (navLeaderboard) navLeaderboard.style.display = '';
             if (navDiscussions) navDiscussions.style.display = '';
+            if (navMessages) navMessages.style.display = '';
             if (navAdmin) navAdmin.style.display = this.user.is_admin ? '' : 'none';
             if (navUser) navUser.style.display = this.user.is_admin ? 'none' : '';
             if (navLogin) navLogin.style.display = 'none';
             if (navLogout) navLogout.style.display = '';
+            if (typeof updateMessageBadge === 'function') updateMessageBadge();
         } else {
             if (navProblems) navProblems.style.display = 'none';
+            if (navLeaderboard) navLeaderboard.style.display = 'none';
             if (navDiscussions) navDiscussions.style.display = 'none';
+            if (navMessages) navMessages.style.display = 'none';
             if (navAdmin) navAdmin.style.display = 'none';
             if (navUser) navUser.style.display = 'none';
             if (navLogin) navLogin.style.display = '';
@@ -76,9 +83,11 @@ const App = {
         else if (hash === '/announcements') activeId = 'nav-announcements';
         else if (hash === '/discussions' || hash.indexOf('/discussions/') === 0) activeId = 'nav-discussions';
         else if (hash === '/user') activeId = 'nav-user';
+        else if (hash === '/leaderboard') activeId = 'nav-leaderboard';
+        else if (hash === '/messages') activeId = 'nav-messages';
         else if (hash.indexOf('/admin') === 0) activeId = 'nav-admin';
         else if (hash === '/login' || hash === '/register') activeId = 'nav-login';
-        ['nav-problems', 'nav-announcements', 'nav-discussions', 'nav-user', 'nav-admin', 'nav-login'].forEach(function(id) {
+        ['nav-problems', 'nav-announcements', 'nav-discussions', 'nav-user', 'nav-admin', 'nav-login', 'nav-leaderboard', 'nav-messages'].forEach(function(id) {
             var el = document.getElementById(id);
             if (el) el.classList.toggle('nav-active', id === activeId);
         });
@@ -96,16 +105,21 @@ const App = {
         window.location.hash = hash;
     },
     route() {
-        const hash = window.location.hash.slice(1) || '/';
-        this.render(hash);
+        const raw = window.location.hash.slice(1) || '/';
+        this.render(raw);
     },
-    async render(hash) {
+    async render(rawHash) {
+        const qIdx = rawHash.indexOf('?');
+        const path = qIdx >= 0 ? rawHash.slice(0, qIdx) : rawHash;
+        const queryStr = qIdx >= 0 ? rawHash.slice(qIdx + 1) : '';
+        const params = new URLSearchParams(queryStr);
+
         const main = $('#content');
         main.classList.add('page-leaving');
         await new Promise(function(r) { setTimeout(r, 140); });
         main.classList.remove('page-leaving');
         main.innerHTML = '';
-        this.highlightNav(hash);
+        this.highlightNav(path);
 
         const routes = {
             '/': 'login',
@@ -121,25 +135,30 @@ const App = {
             '/admin/discussions': 'admin',
             '/announcements': 'announcements',
             '/discussions': 'discussions',
+            '/leaderboard': 'leaderboard',
+            '/messages': 'messages',
             '/404': 'notFound',
         };
 
-        let page = routes[hash];
+        let page = routes[path];
         if (!page) {
-            if (hash.startsWith('/problems/')) {
+            if (path.startsWith('/problems/')) {
                 page = 'problemDetail';
-                const id = hash.split('/')[2];
+                const id = path.split('/')[2];
                 main.dataset.problemId = id;
-            } else if (hash.startsWith('/result/')) {
+            } else if (path.startsWith('/result/')) {
                 page = 'result';
-                const id = hash.split('/')[2];
+                const id = path.split('/')[2];
                 main.dataset.submissionId = id;
-            } else if (hash.startsWith('/discussions/')) {
+            } else if (path.startsWith('/discussions/')) {
                 page = 'discussionDetail';
-                const id = hash.split('/')[2];
+                const id = path.split('/')[2];
                 main.dataset.discussionId = id;
-            } else if (hash.startsWith('/admin/questions/')) {
-                const parts = hash.split('/');
+            } else if (path.startsWith('/users/')) {
+                page = 'userProfile';
+                main.dataset.userId = path.split('/')[2];
+            } else if (path.startsWith('/admin/questions/')) {
+                const parts = path.split('/');
                 const id = parts[3];
                 if (id && id !== 'new' && !isNaN(id)) {
                     page = 'adminQuestionEdit';
@@ -151,6 +170,8 @@ const App = {
                 page = 'notFound';
             }
         }
+
+        const peerUserId = params.get('user') ? parseInt(params.get('user'), 10) : null;
 
         try {
             if ((page === 'login' || page === 'register') && this.user) {
@@ -169,6 +190,9 @@ const App = {
                 case 'announcements': await renderAnnouncements(main); break;
                 case 'discussions': await renderDiscussions(main); break;
                 case 'discussionDetail': await renderDiscussionDetail(main); break;
+                case 'leaderboard': await renderLeaderboard(main); break;
+                case 'messages': await renderMessages(main, { peerUserId: peerUserId }); break;
+                case 'userProfile': await renderUserProfile(main); break;
                 default: renderNotFound(main); break;
             }
         } catch(e) {

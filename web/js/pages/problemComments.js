@@ -47,10 +47,14 @@ function renderProblemCommentListView(container, qid) {
                     ? c.content.slice(0, 100).replace(/\n/g, ' ') + '...'
                     : c.content.replace(/\n/g, ' ');
                 var replyCount = (c.replies && c.replies.length) || 0;
+                var avatar = el('img', {className: 'discussion-avatar', src: c.avatar_url || '', alt: ''});
+                var username = el('span', {className: 'discussion-username', textContent: c.username});
+                attachUserProfileNav(avatar, c.user_id, true);
+                attachUserProfileNav(username, c.user_id, true);
                 var card = el('div', {className: 'discussion-card'},
                     el('div', {className: 'discussion-card-header'},
-                        el('img', {className: 'discussion-avatar', src: c.avatar_url || '', alt: ''}),
-                        el('span', {className: 'discussion-username', textContent: c.username}),
+                        avatar,
+                        username,
                         el('span', {className: 'discussion-time', textContent: formatDate(c.created_at)})
                     ),
                     el('div', {className: 'discussion-card-preview', textContent: preview}),
@@ -149,11 +153,16 @@ function buildProblemCommentDetail(detailContainer, qid, c) {
     var canDelete = App.user && (App.user.id === c.user_id || App.user.is_admin);
     detailContainer.innerHTML = '';
 
+    var postAvatar = el('img', {className: 'discussion-avatar', src: c.avatar_url || '', alt: ''});
+    var postUsername = el('span', {className: 'discussion-username', textContent: c.username});
+    attachUserProfileNav(postAvatar, c.user_id, false);
+    attachUserProfileNav(postUsername, c.user_id, false);
+
     var postCard = el('div', {className: 'discussion-detail-post'},
         el('div', {className: 'discussion-detail-header'},
-            el('img', {className: 'discussion-avatar', src: c.avatar_url || '', alt: ''}),
+            postAvatar,
             el('div',
-                el('span', {className: 'discussion-username', textContent: c.username}),
+                postUsername,
                 el('span', {className: 'discussion-time', textContent: formatDate(c.created_at)})
             )
         ),
@@ -207,10 +216,15 @@ function renderProblemCommentReplies(container, replies, qid, commentId, detailC
         var canDeleteReply = App.user && (App.user.id === r.user_id || App.user.is_admin);
         var indent = r.parent_reply_id ? 1 : 0;
 
+        var replyAvatar = el('img', {className: 'discussion-avatar-small', src: r.avatar_url || '', alt: ''});
+        var replyUsername = el('span', {className: 'discussion-username', textContent: r.username});
+        attachUserProfileNav(replyAvatar, r.user_id, false);
+        attachUserProfileNav(replyUsername, r.user_id, false);
+
         var replyEl = el('div', {className: 'discussion-reply' + (indent ? ' reply-indent' : '')},
             el('div', {className: 'discussion-reply-header'},
-                el('img', {className: 'discussion-avatar-small', src: r.avatar_url || '', alt: ''}),
-                el('span', {className: 'discussion-username', textContent: r.username}),
+                replyAvatar,
+                replyUsername,
                 el('span', {className: 'discussion-time', textContent: formatDate(r.created_at)})
             ),
             el('div', {className: 'markdown-body', innerHTML: renderMarkdown(r.content)}),

@@ -23,11 +23,16 @@ function buildDiscussionDetail(container, d) {
 
     container.innerHTML = '';
 
+    const postAvatar = el('img', {className: 'discussion-avatar', src: d.avatar_url || '', alt: ''});
+    const postUsername = el('span', {className: 'discussion-username', textContent: d.username});
+    attachUserProfileNav(postAvatar, d.user_id, false);
+    attachUserProfileNav(postUsername, d.user_id, false);
+
     const postCard = el('div', {className: 'discussion-detail-post'},
         el('div', {className: 'discussion-detail-header'},
-            el('img', {className: 'discussion-avatar', src: d.avatar_url || '', alt: ''}),
+            postAvatar,
             el('div',
-                el('span', {className: 'discussion-username', textContent: d.username}),
+                postUsername,
                 el('span', {className: 'discussion-time', textContent: formatDate(d.created_at)})
             )
         ),
@@ -74,10 +79,15 @@ function renderReplies(container, replies, discussionId) {
         const canDeleteReply = App.user && (App.user.id === r.user_id || App.user.is_admin);
         const indent = r.parent_reply_id ? 1 : 0;
 
+        const replyAvatar = el('img', {className: 'discussion-avatar-small', src: r.avatar_url || '', alt: ''});
+        const replyUsername = el('span', {className: 'discussion-username', textContent: r.username});
+        attachUserProfileNav(replyAvatar, r.user_id, false);
+        attachUserProfileNav(replyUsername, r.user_id, false);
+
         const replyEl = el('div', {className: 'discussion-reply' + (indent ? ' reply-indent' : '')},
             el('div', {className: 'discussion-reply-header'},
-                el('img', {className: 'discussion-avatar-small', src: r.avatar_url || '', alt: ''}),
-                el('span', {className: 'discussion-username', textContent: r.username}),
+                replyAvatar,
+                replyUsername,
                 el('span', {className: 'discussion-time', textContent: formatDate(r.created_at)})
             ),
             el('div', {className: 'markdown-body', innerHTML: renderMarkdown(r.content)}),
