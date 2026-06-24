@@ -104,6 +104,7 @@ CompileResult compile_code(const std::string& code, const std::string& tmp_dir, 
 
         result.success = true;
         result.binary_path = bin_path;
+        result.binary_size = st.st_size;
         LOG_DEBUG("Compile: success -> " + bin_path + " (" + std::to_string(st.st_size) + " bytes)");
         return result;
     } else {

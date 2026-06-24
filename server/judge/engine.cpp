@@ -38,6 +38,18 @@ void JudgeEngine::process(int submission_id, const std::string& code, int questi
         return;
     }
 
+    // Check binary size
+    if (g_config.max_binary_size > 0 && comp.binary_size > g_config.max_binary_size) {
+        unlink(comp.binary_path.c_str());
+        db->query("UPDATE submissions SET status='CE', compile_error='Binary exceeds size limit (" +
+                  std::to_string(g_config.max_binary_size) + " bytes)', total_count=0, passed_count=0 WHERE id=" +
+                  std::to_string(submission_id));
+        LOG_WARNING("Submission #" + std::to_string(submission_id) + " binary too large: " +
+                    std::to_string(comp.binary_size) + " bytes (limit: " +
+                    std::to_string(g_config.max_binary_size) + ")");
+        return;
+    }
+
     // Get test cases
     db->query("SELECT id, order_index, input_data, expected_output FROM test_cases WHERE question_id=" +
               std::to_string(question_id) + " ORDER BY order_index ASC");

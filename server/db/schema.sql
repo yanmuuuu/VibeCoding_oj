@@ -22,6 +22,7 @@ CREATE TABLE sessions (
 
 CREATE TABLE questions (
     id              INT AUTO_INCREMENT PRIMARY KEY,
+    display_index   INT          NOT NULL DEFAULT 0,
     title           VARCHAR(256) NOT NULL,
     description     TEXT         NOT NULL,
     input_format    TEXT,

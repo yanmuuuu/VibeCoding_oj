@@ -26,6 +26,12 @@ function userProfilePath(userId) {
     if (typeof App !== 'undefined' && App.user && App.user.id === userId) return '#/user';
     return '#/users/' + userId;
 }
+
+/** localStorage 键：按用户 + 题目隔离代码草稿，避免同浏览器换号串代码 */
+function codeDraftStorageKey(problemId) {
+    var uid = (typeof App !== 'undefined' && App.user && App.user.id) ? App.user.id : 0;
+    return 'code_' + uid + '_' + problemId;
+}
 function attachUserProfileNav(element, userId, stopPropagation) {
     if (!element || !userId) return;
     element.classList.add('user-profile-link');
@@ -84,7 +90,7 @@ function _openMioDialog(opts) {
         backdrop.className = 'mio-dialog-backdrop';
 
         var panel = document.createElement('div');
-        panel.className = 'mio-dialog-panel' + (danger ? ' mio-dialog-danger' : '');
+        panel.className = 'mio-dialog-panel' + (danger ? ' mio-dialog-danger' : '') + (opts.wide ? ' mio-dialog-panel-wide' : '');
 
         var header = document.createElement('div');
         header.className = 'mio-dialog-header';
@@ -92,8 +98,8 @@ function _openMioDialog(opts) {
 
         var body = document.createElement('div');
         body.className = 'mio-dialog-body';
-        var msgEl = document.createElement('p');
-        msgEl.className = 'mio-dialog-message';
+        var msgEl = document.createElement(opts.monospace ? 'pre' : 'p');
+        msgEl.className = 'mio-dialog-message' + (opts.monospace ? ' mio-dialog-pre' : '');
         msgEl.textContent = message;
         body.appendChild(msgEl);
 
@@ -186,7 +192,9 @@ function showAlert(message, opts) {
         type: 'alert',
         message: message,
         title: opts.title || '提示',
-        confirmText: opts.confirmText || '确定'
+        confirmText: opts.confirmText || '确定',
+        wide: opts.wide,
+        monospace: opts.monospace
     });
 }
 
@@ -273,12 +281,10 @@ function bindMarkdownPreview(textareaId, previewId) {
 }
 
 function showTcExpandModal(title, content) {
-    var modal = document.createElement('div');
-    modal.className = 'tc-expand-modal';
-    modal.innerHTML = '<div class="tc-expand-backdrop"></div><div class="tc-expand-panel"><div class="tc-expand-header"><span>' + escapeHtml(title) + '</span><button type="button" class="tc-expand-close">&times;</button></div><pre class="tc-expand-body"></pre></div>';
-    modal.querySelector('.tc-expand-body').textContent = content;
-    function close() { modal.remove(); }
-    modal.querySelector('.tc-expand-close').onclick = close;
-    modal.querySelector('.tc-expand-backdrop').onclick = close;
-    document.body.appendChild(modal);
+    showAlert(content, { title: title, wide: true, monospace: true });
+}
+
+function nextTestCaseOrderIndex(testCases) {
+    if (!testCases || !testCases.length) return 0;
+    return Math.max.apply(null, testCases.map(function(t) { return t.order_index; })) + 1;
 }

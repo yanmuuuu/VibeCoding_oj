@@ -1,4 +1,5 @@
 #include "threadpool.hpp"
+#include "../util/logger.hpp"
 
 ThreadPool::ThreadPool(size_t threads) {
     for (size_t i = 0; i < threads; ++i) {
@@ -15,9 +16,9 @@ ThreadPool::ThreadPool(size_t threads) {
                 try {
                     task();
                 } catch (const std::exception& e) {
-                    // Log but don't kill the worker thread
+                    LOG_ERROR("Judge worker task threw exception: " + std::string(e.what()));
                 } catch (...) {
-                    // Ignore unknown exceptions to keep worker alive
+                    LOG_ERROR("Judge worker task threw unknown exception");
                 }
             }
         });

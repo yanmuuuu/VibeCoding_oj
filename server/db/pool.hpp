@@ -30,10 +30,19 @@ public:
            const std::string& pass, const std::string& db, int size);
     ~DbPool();
 
-    std::shared_ptr<DbConn> acquire();
+    std::shared_ptr<DbConn> acquire(int timeout_ms = 5000);
     void release(MYSQL* conn);
 
 private:
+    MYSQL* create_connection();
+    bool validate_connection(MYSQL* conn);
+    MYSQL* get_valid_connection();
+
+    std::string host_;
+    int port_;
+    std::string user_;
+    std::string pass_;
+    std::string db_;
     std::queue<MYSQL*> pool_;
     std::mutex mutex_;
     std::condition_variable cv_;

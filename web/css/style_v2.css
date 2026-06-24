@@ -971,6 +971,18 @@ body.lc-white .toast { background: #fff; color: #262626; border-color: #e8e8e8; 
 .mio-dialog-show .mio-dialog-panel {
     transform: translateY(0) scale(1);
 }
+.mio-dialog-panel-wide {
+    width: min(720px, 92vw);
+}
+.mio-dialog-pre {
+    max-height: 60vh;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.85em;
+    margin: 0;
+}
 .mio-dialog-header {
     padding: 14px 20px 10px;
     color: #fcd9b8;

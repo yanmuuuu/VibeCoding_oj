@@ -171,7 +171,7 @@ int main() {
         localStorage.setItem(themeKey, themeSelect.value);
     });
 
-    const storageKey = 'code_' + id;
+    const storageKey = codeDraftStorageKey(id);
     let saveTimeout = null;
     let preAcCode = null;
 

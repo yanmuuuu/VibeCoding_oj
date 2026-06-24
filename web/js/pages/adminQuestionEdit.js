@@ -14,7 +14,7 @@ async function renderAdminQuestionEdit(main) {
     main.innerHTML = `<div class="page-container admin-edit-page" style="max-width:1100px;">
         <a href="#/admin/questions" class="back-link">← 返回题目管理</a>
         <div class="admin-edit-header">
-            <h2>编辑题目 #${qid}: ${escapeHtml(q.title)}</h2>
+            <h2>编辑题目 #${q.display_index != null ? q.display_index : qid}: ${escapeHtml(q.title)}</h2>
             <button type="button" class="btn-secondary" id="preview-problem-btn" style="width:auto;padding:8px 18px;">预览做题页</button>
         </div>
 
@@ -61,11 +61,11 @@ async function renderAdminQuestionEdit(main) {
             <h3>测试用例管理</h3>
             <div id="testcase-list"></div>
             <h4>添加测试用例</h4>
+            <p class="admin-hint">可连续添加多条；序号从 0 开始自动递增。</p>
             <form id="tc-form">
                 <div class="form-group"><label>输入数据</label><textarea id="tc-input" rows="3" required></textarea></div>
                 <div class="form-group"><label>期望输出</label><textarea id="tc-output" rows="3" required></textarea></div>
-                <div class="form-group"><label>顺序</label><input type="number" id="tc-order" value="0" min="0"></div>
-                <button type="submit" class="btn-secondary">添加</button>
+                <button type="submit" class="btn-secondary">添加测试用例</button>
             </form>
         </section>
     </div>`;
@@ -103,15 +103,15 @@ async function renderAdminQuestionEdit(main) {
         if (tcs.length === 0) {
             html += '<tr><td colspan="5">暂无测试用例</td></tr>';
         } else {
-            tcs.forEach(tc => {
+            tcs.forEach((tc, idx) => {
                 html += `<tr id="tc-row-${tc.id}">
-                    <td>${tc.id}</td>
+                    <td>${tc.order_index != null ? tc.order_index : idx}</td>
                     <td class="tc-cell"><pre class="tc-preview" id="tc-input-preview-${tc.id}">${escapeHtml(tc.input_data.substring(0, 100))}${tc.input_data.length > 100 ? '...' : ''}</pre>
-                        <button type="button" class="btn-sm tc-expand-btn" data-title="输入 #${tc.id}" data-content-id="tc-input-full-${tc.id}">展开</button>
+                        <button type="button" class="btn-sm tc-expand-btn" data-title="输入 #${tc.order_index != null ? tc.order_index : idx}" data-content-id="tc-input-full-${tc.id}">展开</button>
                         <textarea id="tc-input-full-${tc.id}" style="display:none;">${escapeHtml(tc.input_data)}</textarea>
                         <textarea id="tc-input-edit-${tc.id}" class="tc-edit-input" style="display:none;width:100%;min-height:60px;font-family:monospace;font-size:0.82em;">${escapeHtml(tc.input_data)}</textarea></td>
                     <td class="tc-cell"><pre class="tc-preview" id="tc-output-preview-${tc.id}">${escapeHtml(tc.expected_output.substring(0, 100))}${tc.expected_output.length > 100 ? '...' : ''}</pre>
-                        <button type="button" class="btn-sm tc-expand-btn" data-title="期望输出 #${tc.id}" data-content-id="tc-output-full-${tc.id}">展开</button>
+                        <button type="button" class="btn-sm tc-expand-btn" data-title="期望输出 #${tc.order_index != null ? tc.order_index : idx}" data-content-id="tc-output-full-${tc.id}">展开</button>
                         <textarea id="tc-output-full-${tc.id}" style="display:none;">${escapeHtml(tc.expected_output)}</textarea>
                         <textarea id="tc-output-edit-${tc.id}" class="tc-edit-input" style="display:none;width:100%;min-height:60px;font-family:monospace;font-size:0.82em;">${escapeHtml(tc.expected_output)}</textarea></td>
                     <td><span id="tc-order-view-${tc.id}">${tc.order_index}</span>
@@ -272,13 +272,14 @@ async function renderAdminQuestionEdit(main) {
         e.preventDefault();
         const input_data = $('#tc-input').value.trim();
         const expected_output = $('#tc-output').value.trim();
-        const order_index = parseInt($('#tc-order').value) || 0;
         if (!input_data || !expected_output) { showToast('请填写输入和期望输出', 'error'); return; }
         try {
-            await API.createTestCase(qid, { input_data, expected_output, order_index });
+            await API.createTestCase(qid, { input_data, expected_output });
             renderTestCases(await API.getTestCases(qid));
             $('#tc-input').value = '';
             $('#tc-output').value = '';
+            $('#tc-input').focus();
+            showToast('测试用例已添加，可继续添加下一条', 'success');
         } catch (err) {
             showToast('添加失败: ' + err.message, 'error');
         }

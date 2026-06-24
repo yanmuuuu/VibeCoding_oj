@@ -51,7 +51,8 @@
 - **发布校验**：设为「可见」须 **≥1 测试用例 + 已保存标程**，否则后端直接拒绝
 - **标程变更提示**：编辑页修改标程后提示「期望输出可能过期，请重新生成」
 - **题目描述**：Markdown 录入 + 实时预览；**预览做题页**（新标签打开 `#/problems/:id`，管理员可查看隐藏题）
-- **测试用例管理**：增删改查、行内编辑、截断预览 + **展开全文弹窗**
+- **测试用例管理**：增删改查、**连续添加**（序号从 0 自动递增）、行内编辑、截断预览 + **展开全文弹窗**（统一 `showAlert`/`showConfirm`，LeetCode 白模式为白底简约）
+- **题目展示编号**：用户可见 `#` 为 `display_index`（**从 0 开始**），与数据库自增 `id` 解耦；新建题目时自动分配 `MAX(display_index)+1`
 - **用户管理**：列表（分页+搜索）、删除用户（级联删库 + 清理 `user_*` 文件）、升降管理员、**封禁/解封**（立即踢 session）、**管理员重置密码**（设定新密码并清 session）
 - **讨论管理**：列表 + 搜索、删帖/删回复、跳转原帖
 - **系统公告**：管理员发布/编辑/删除公告
@@ -192,6 +193,7 @@ CREATE TABLE sessions (
 ```sql
 CREATE TABLE questions (
     id              INT AUTO_INCREMENT PRIMARY KEY,
+    display_index   INT          NOT NULL DEFAULT 0,   -- 用户可见题号，从 0 开始
     title           VARCHAR(256) NOT NULL,
     description     TEXT         NOT NULL,
     input_format    TEXT,                             -- 输入格式说明
@@ -1091,7 +1093,7 @@ MioOJ/
 
 ### Phase 14 — 体验优化
 - [x] 测试数据隐私保护：`detail_json` 移除 `input`/`expected`/`actual` 字段，结果页只显示状态、耗时、内存
-- [x] 代码持久化：每个题目代码自动保存到浏览器 `localStorage`（键 `code_{题目ID}`），离开/刷新页面自动恢复，提交后不清除
+- [x] 代码持久化：每个用户、每题代码自动保存到浏览器 `localStorage`（键 `code_{用户ID}_{题目ID}`），离开/刷新页面自动恢复，提交后不清除；**同浏览器换账号互不干扰**
 - [x] 用户中心改进：两层视图（问题状态总览 + 可展开提交历史），增加提交统计（总次数/通过题数/尝试题数），表格增加耗时/内存列和跳转提示
 - [x] 用户中心 API：`title` 字段 JSON 转义，修复特殊字符导致前端解析失败
 - [x] 登录页改进：移除用户名长度提示和 `minlength`（该校验仅注册页需要），placeholder 改中文，错误提示中文化
@@ -1265,13 +1267,23 @@ MioOJ/
 - [x] 前端：右键自己的消息弹出「撤回」菜单；双方看到占位文案「你/对方撤回了一条消息」
 - [x] `api.js` 新增 `recallMessage()`；`.msg-context-menu` / `.msg-bubble-recalled` 样式
 
+### Phase 31 — 录题体验优化 ✅
+- [x] 数据库：`questions.display_index INT`（`migrate_phase31.sql`）；已有题目按 `id` 升序回填 0,1,2…
+- [x] 新建题目：`display_index = MAX(display_index)+1`（首题为 0）；API 返回 `display_index`；列表/向导/编辑页 `#` 均展示 `display_index`
+- [x] 测试用例：添加时 **order_index 自动递增**（从 0 起）；向导/编辑页可 **连续添加** 多条；删除前 **showConfirm** 确认
+- [x] 测试用例展开/删除弹窗统一走 `mio-dialog`（相册+LeetCode 白模式自适应）
+
+### Phase 32 — 代码草稿按用户隔离 ✅
+- [x] `localStorage` 键由 `code_{题目ID}` 改为 `code_{用户ID}_{题目ID}`（`utils.js` → `codeDraftStorageKey()`）
+- [x] 同浏览器切换账号后，各用户恢复各自草稿，不再串用他人代码
+
 ## 12. 验收标准
 
 | 编号 | 验收项 | 标准 |
 |---|---|---|
 | AC-1 | 注册/登录 | 用户名 ≥3 字符 + 密码 ≥8 字符 ≥2 种字符类型，注册后登录获得 token，刷新保持登录态 |
 | AC-2 | 未登录拦截 | 未登录访问任何需鉴权页面跳转 `#/login` |
-| AC-3 | 题目列表 | 仅显示 `is_visible=1` 的题目，含编号、标题、限制 |
+| AC-3 | 题目列表 | 仅显示 `is_visible=1` 的题目，含 **展示编号 `display_index`（从 0 起）**、标题、限制 |
 | AC-4 | 题目详情 | 显示完整描述、输入输出格式、样例、限制 |
 | AC-5 | 代码提交 | 提交 C++ 代码，返回 submission_id，前端跳转到 `#/result/:id` 页面 |
 | AC-6 | AC 判定 | 所有测试点输出完全匹配 → 总状态 AC |
@@ -1288,7 +1300,7 @@ MioOJ/
 | AC-17 | 404/500 | 无效路由返回 404 页，服务端异常返回 500 页 |
 | AC-18 | 安全防线 | 用户代码无法读写文件系统、无法 fork 子进程、无法访问网络 |
 | AC-19 | 结果轮询 | 跳转到 `#/result/:id` 后前端轮询 `/api/submissions/:id`（2s 间隔），状态非 PENDING/COMPILING/RUNNING 时停止，渲染结果方块网格 |
-| AC-20 | 代码持久化 | 离开题目详情页再返回，代码编辑器恢复之前内容（localStorage 保存/读取） |
+| AC-20 | 代码持久化 | 离开题目详情页再返回，代码编辑器恢复**当前登录用户**之前内容（localStorage 键 `code_{用户ID}_{题目ID}`）；换账号后不显示他人草稿 |
 | AC-21 | 用户中心统计 | 用户中心顶部显示提交总次数、已通过题数、尝试过的题数 |
 | AC-22 | 加载已通过代码 | 题目详情页点击「加载已通过代码」→ 从后端获取最新 AC 代码并填入编辑器；无 AC 记录时弹窗提示 |
 | AC-23 | 多版本 AC 代码列表 | 点击「加载已通过代码」弹出下拉列表展示用户在该题所有 AC 提交（含 ID、时间、性能），点击任一条填入编辑器 |
@@ -1356,6 +1368,10 @@ MioOJ/
 | AC-85 | 私信未读 | 导航栏邮件图标未读角标；进入会话自动已读 |
 | AC-86 | 公开主页 | `#/users/:id` 仅展示头像/用户名/积分/AC 等公开信息；讨论/排行榜等处点击他人头像可进入；主页有「发私信」按钮（本人无此按钮） |
 | AC-87 | 私信撤回 | 发送后 1 分钟内右键自己的消息可撤回；双方见占位提示；会话列表预览显示 `[已撤回]`；超时或非本人返回 400 |
+| AC-88 | 题号从 0 起 | 题目列表/管理页 `#` 显示 `display_index`（0,1,2…），新建题目自动分配，不暴露数据库自增 id 作为题号 |
+| AC-89 | 测试用例连续添加 | 录题向导/编辑页添加用例后表单清空并可继续添加；`order_index` 从 0 自动递增 |
+| AC-90 | 删用例确认弹窗 | 删除测试用例前弹出 `showConfirm`；LeetCode 白模式下为白底简约卡片，非相册黑金背景 |
+| AC-91 | 代码草稿隔离 | 账号 A/B 在同一浏览器交替登录同一题，编辑器分别恢复各自草稿，互不可见 |
 
 ---
 
@@ -1485,6 +1501,9 @@ mysql -u VibeOJUser -p vibeoj < server/db/migrate_phase13.sql
 
 # 导入 Phase 30 迁移（私信撤回 is_recalled 字段）
 mysql -u VibeOJUser -p vibeoj < server/db/migrate_phase30.sql
+
+# 导入 Phase 31 迁移（题目 display_index 展示编号）
+mysql -u VibeOJUser -p vibeoj < server/db/migrate_phase31.sql
 
 # =============================================
 # 步骤 4: 编译项目

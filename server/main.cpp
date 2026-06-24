@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <sys/stat.h>
+#include <atomic>
 
 #include "config.hpp"
 #include "db/pool.hpp"
@@ -18,6 +19,14 @@
 
 Config g_config;
 JudgeEngine* g_judge = nullptr;
+static std::atomic<bool> g_shutdown{false};
+static httplib::Server* g_svr = nullptr;
+
+static void signal_handler(int sig) {
+    g_shutdown = true;
+    if (g_svr) g_svr->stop();
+    LOG_INFO("Received signal " + std::to_string(sig) + ", shutting down...");
+}
 
 void register_auth_routes(httplib::Server& svr);
 void register_problem_routes(httplib::Server& svr);
@@ -67,6 +76,9 @@ static void serve_spa(httplib::Server& svr) {
 int main() {
     // Ignore SIGPIPE to prevent crashes when clients disconnect mid-response
     signal(SIGPIPE, SIG_IGN);
+    // Graceful shutdown on SIGTERM/SIGINT (systemd sends SIGTERM on restart)
+    signal(SIGTERM, signal_handler);
+    signal(SIGINT, signal_handler);
     srand(static_cast<unsigned int>(time(nullptr)));
 
     load_config_from_env(g_config);
@@ -137,10 +149,20 @@ int main() {
 
     serve_spa(svr);
 
-    LOG_INFO("MioOJ Server running on http://0.0.0.0:" + std::to_string(g_config.port));
-    std::cout << "VibeOJ Server running on http://0.0.0.0:" << g_config.port << std::endl;
-    svr.listen("0.0.0.0", g_config.port);
+    g_svr = &svr;
+    LOG_INFO("MioOJ Server binding to http://0.0.0.0:" + std::to_string(g_config.port));
+    std::cout << "VibeOJ Server binding to http://0.0.0.0:" << g_config.port << std::endl;
 
+    if (!svr.listen("0.0.0.0", g_config.port)) {
+        LOG_ERROR("Failed to bind to port " + std::to_string(g_config.port) +
+                  ". Port may already be in use. Is another instance running?");
+        g_svr = nullptr;
+        delete g_judge;
+        delete g_db;
+        return 1;
+    }
+
+    g_svr = nullptr;
     LOG_INFO("MioOJ Server shut down");
     delete g_judge;
     delete g_db;

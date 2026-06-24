@@ -11,8 +11,9 @@ async function renderProblems(main) {
         }
 
         if (/^\d+$/.test(keyword)) {
+            if (String(p.display_index != null ? p.display_index : p.id) === keyword) return true;
             if (String(p.id) === keyword) return true;
-            if (String(p.id).includes(keyword)) return true;
+            if (String(p.display_index != null ? p.display_index : p.id).includes(keyword)) return true;
         }
 
         if (p.title && p.title.toLowerCase().includes(keyword)) return true;
@@ -35,7 +36,7 @@ async function renderProblems(main) {
         }
         return filtered.map(p =>
             `<tr class="clickable" data-href="#/problems/${p.id}">
-                <td>${p.id}</td>
+                <td>${p.display_index != null ? p.display_index : p.id}</td>
                 <td>${escapeHtml(p.title)}</td>
                 <td>${difficultyBadge(p.difficulty)}</td>
                 <td>${p.time_limit}s</td>

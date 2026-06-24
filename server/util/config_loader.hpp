@@ -32,6 +32,7 @@ inline void load_config_from_env(Config& c) {
     c.default_time_limit = cfg_env_int("VIBEOJ_DEFAULT_TIME_LIMIT", c.default_time_limit);
     c.default_memory_limit = cfg_env_int("VIBEOJ_DEFAULT_MEMORY_LIMIT", c.default_memory_limit);
     c.compile_timeout = cfg_env_int("VIBEOJ_COMPILE_TIMEOUT", c.compile_timeout);
+    c.max_binary_size = cfg_env_int("VIBEOJ_MAX_BINARY_SIZE", c.max_binary_size);
     c.log_file = cfg_env("VIBEOJ_LOG_FILE", c.log_file);
     c.log_level = cfg_env_int("VIBEOJ_LOG_LEVEL", c.log_level);
 }

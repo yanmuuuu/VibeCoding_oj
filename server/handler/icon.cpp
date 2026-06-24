@@ -8,8 +8,11 @@
 #include <cstdlib>
 #include <algorithm>
 #include <cctype>
+#include <mutex>
 
 namespace fs = std::filesystem;
+
+static std::mutex g_icon_rand_mutex;
 
 static bool is_icon_ext(const std::string& ext) {
     return ext == ".ico" || ext == ".png" || ext == ".jpg" || ext == ".jpeg"
@@ -75,7 +78,11 @@ void register_icon_routes(httplib::Server& svr) {
             return;
         }
 
-        size_t idx = static_cast<size_t>(rand()) % icons.size();
+        size_t idx;
+        {
+            std::lock_guard<std::mutex> lock(g_icon_rand_mutex);
+            idx = static_cast<size_t>(rand()) % icons.size();
+        }
         std::string filepath = g_config.web_root + icons[idx];
         std::string ext = fs::path(filepath).extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(),

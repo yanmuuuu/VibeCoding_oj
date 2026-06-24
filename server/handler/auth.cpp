@@ -1,4 +1,5 @@
 #include <httplib.h>
+#include "../config.hpp"
 #include "../db/pool.hpp"
 #include "../middleware/auth.hpp"
 #include "../util/crypto.hpp"
@@ -9,11 +10,14 @@
 #include <filesystem>
 #include <cstdlib>
 #include <ctime>
+#include <mutex>
 
 namespace fs = std::filesystem;
 
+static std::mutex g_rand_mutex;
+
 static std::string pick_random_default_avatar() {
-    std::string avatar_dir = "web/avatars";
+    std::string avatar_dir = g_config.web_root + "/avatars";
     std::vector<std::string> defaults;
     try {
         if (fs::exists(avatar_dir) && fs::is_directory(avatar_dir)) {
@@ -31,7 +35,11 @@ static std::string pick_random_default_avatar() {
         }
     } catch (...) {}
     if (defaults.empty()) return "/avatars/at1.webp";
-    int idx = rand() % defaults.size();
+    int idx;
+    {
+        std::lock_guard<std::mutex> lock(g_rand_mutex);
+        idx = rand() % defaults.size();
+    }
     return defaults[idx];
 }
 

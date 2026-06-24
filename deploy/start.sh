@@ -40,4 +40,13 @@ set -a
 source "$ENV_FILE"
 set +a
 
+# 防止同时启动两个实例导致端口冲突
+PORT="${VIBEOJ_PORT:-8080}"
+if ss -tlnp 2>/dev/null | grep -q ":${PORT} "; then
+    echo "ERROR: Port ${PORT} is already in use. Another vibeoj instance may be running." >&2
+    echo "  Check: sudo systemctl status vibeoj" >&2
+    echo "  Or:    ss -tlnp | grep :${PORT}" >&2
+    exit 1
+fi
+
 exec "$ROOT/vibeoj"

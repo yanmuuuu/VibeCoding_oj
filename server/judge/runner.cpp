@@ -106,7 +106,7 @@ RunResult run_single(const std::string& binary_path, const TestCase& tc,
             pid_t w = wait4(pid, &status, WNOHANG, &rusage);
             if (w > 0) break;
             if (w < 0) {
-                if (errno != EINTR && errno != EAGAIN) break;
+                if (errno != EINTR) break;
             }
             usleep(50000); // 50ms
             waited += 50;
@@ -145,6 +145,7 @@ RunResult run_single(const std::string& binary_path, const TestCase& tc,
         trim(result.actual_output);
         trim(result.expected_output);
 
+        int memory_limit_kb = memory_limit_mb * 1024;
         if (timed_out) {
             result.status = "TLE";
         } else if (WIFEXITED(status)) {
@@ -169,7 +170,12 @@ RunResult run_single(const std::string& binary_path, const TestCase& tc,
                     result.status = "MLE";
                 }
             } else if (sig == SIGSEGV) {
-                result.status = "RE";
+                if (result.memory_kb > 0 && memory_limit_kb > 0 &&
+                    static_cast<long>(result.memory_kb) >= memory_limit_kb * 80 / 100) {
+                    result.status = "MLE";
+                } else {
+                    result.status = "RE";
+                }
             } else {
                 result.status = "RE";
             }

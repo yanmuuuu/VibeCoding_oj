@@ -74,7 +74,7 @@ async function loadQuestions(content) {
     questions.forEach(q => {
         rows += `<tr>
             <td><input type="checkbox" class="q-check" data-id="${q.id}"></td>
-            <td>${q.id}</td>
+            <td>${q.display_index != null ? q.display_index : q.id}</td>
             <td>${escapeHtml(q.title)}</td>
             <td>${escapeHtml(q.difficulty || '简单')}</td>
             <td>${q.is_visible ? '<span class="badge badge-green">可见</span>' : '<span class="badge badge-red">隐藏</span>'}</td>
@@ -149,7 +149,7 @@ async function loadQuestions(content) {
 }
 
 function showCreateQuestionForm(content) {
-    const state = { step: 1, questionId: null, refEditor: null };
+    const state = { step: 1, questionId: null, displayIndex: null, refEditor: null };
 
     function renderWizard() {
         const steps = ['基本信息', '标程代码', '测试用例'];
@@ -182,6 +182,7 @@ function showCreateQuestionForm(content) {
             $('#back-to-questions').onclick = () => loadQuestions(content);
             if (state.questionId) {
                 API.getAdminQuestion(state.questionId).then(q => {
+                    state.displayIndex = q.display_index;
                     $('#w-title').value = q.title || '';
                     $('#w-diff').value = q.difficulty || '简单';
                     $('#w-desc').value = q.description || '';
@@ -220,6 +221,11 @@ function showCreateQuestionForm(content) {
                     else {
                         const res = await API.createQuestion(data);
                         state.questionId = res.id;
+                        state.displayIndex = res.display_index;
+                    }
+                    if (state.displayIndex == null && state.questionId) {
+                        const q = await API.getAdminQuestion(state.questionId);
+                        state.displayIndex = q.display_index;
                     }
                     state.step = 2;
                     renderWizard();
@@ -233,7 +239,7 @@ function showCreateQuestionForm(content) {
 
         if (state.step === 2) {
             content.innerHTML = `<a href="javascript:void(0)" class="back-link" id="back-to-questions">← 返回题目管理</a>
-                <h3>新建题目 #${state.questionId}</h3>${stepHtml}
+                <h3>新建题目 #${state.displayIndex != null ? state.displayIndex : '…'}</h3>${stepHtml}
                 <div class="admin-wizard-panel">
                     <p class="admin-hint">题目已保存为草稿。请录入 C++ 标程代码。</p>
                     <div id="w-ref-editor" style="height:300px;border-radius:8px;overflow:hidden;"></div>
@@ -266,9 +272,9 @@ function showCreateQuestionForm(content) {
         }
 
         content.innerHTML = `<a href="javascript:void(0)" class="back-link" id="back-to-questions">← 返回题目管理</a>
-            <h3>新建题目 #${state.questionId}</h3>${stepHtml}
+            <h3>新建题目 #${state.displayIndex != null ? state.displayIndex : '…'}</h3>${stepHtml}
             <div class="admin-wizard-panel">
-                <p class="admin-hint">添加测试用例后可发布。也可稍后到编辑页继续完善。</p>
+            <p class="admin-hint">添加测试用例后可发布。可连续添加多条，序号从 0 开始自动递增。</p>
                 <div id="wizard-tc-list"></div>
                 <form id="wizard-tc-form" style="margin-top:16px;">
                     <div class="form-group"><label>输入数据</label><textarea id="w-tc-input" rows="3" required></textarea></div>
@@ -290,12 +296,13 @@ function showCreateQuestionForm(content) {
             wizardCases = await API.getTestCases(state.questionId);
             let html = '<table class="data-table"><thead><tr><th>#</th><th>输入</th><th>期望输出</th><th>操作</th></tr></thead><tbody>';
             if (!wizardCases.length) html += '<tr><td colspan="4">暂无测试用例</td></tr>';
-            else wizardCases.forEach(tc => {
-                html += `<tr><td>${tc.id}</td><td><pre class="tc-preview">${escapeHtml(tc.input_data.substring(0,80))}</pre></td><td><pre class="tc-preview">${escapeHtml(tc.expected_output.substring(0,80))}</pre></td><td><button class="btn-sm btn-danger w-del-tc" data-id="${tc.id}">删除</button></td></tr>`;
+            else wizardCases.forEach((tc, idx) => {
+                html += `<tr><td>${tc.order_index != null ? tc.order_index : idx}</td><td><pre class="tc-preview">${escapeHtml(tc.input_data.substring(0,80))}</pre></td><td><pre class="tc-preview">${escapeHtml(tc.expected_output.substring(0,80))}</pre></td><td><button class="btn-sm btn-danger w-del-tc" data-id="${tc.id}">删除</button></td></tr>`;
             });
             html += '</tbody></table>';
             $('#wizard-tc-list').innerHTML = html;
             $$('.w-del-tc').forEach(btn => btn.onclick = async () => {
+                if (!(await showConfirm('确定删除此测试用例？', { danger: true }))) return;
                 await API.deleteTestCase(state.questionId, btn.dataset.id);
                 refreshWizardCases();
             });
@@ -308,11 +315,12 @@ function showCreateQuestionForm(content) {
             e.preventDefault();
             await API.createTestCase(state.questionId, {
                 input_data: $('#w-tc-input').value.trim(),
-                expected_output: $('#w-tc-output').value.trim(),
-                order_index: wizardCases.length
+                expected_output: $('#w-tc-output').value.trim()
             });
             $('#w-tc-input').value = '';
             $('#w-tc-output').value = '';
+            $('#w-tc-input').focus();
+            showToast('测试用例已添加，可继续添加下一条', 'success');
             refreshWizardCases();
         };
         $('#wizard-gen').onclick = async () => {

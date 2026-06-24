@@ -42,6 +42,11 @@ AuthUser authenticate(const httplib::Request& req) {
             LOG_WARNING("Auth rejected: banned user id=" + std::string(row[0] ? row[0] : "?") + " attempted access");
             return u;
         }
+        if (!row[0]) {
+            mysql_free_result(res);
+            LOG_WARNING("Auth rejected: null user_id in session");
+            return u;
+        }
         u.id = std::stoi(row[0]);
         u.username = row[1] ? row[1] : "";
         u.is_admin = row[2] ? (std::stoi(row[2]) != 0) : false;

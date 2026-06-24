@@ -2,6 +2,7 @@
 #include "../util/logger.hpp"
 #include <cstring>
 #include <iostream>
+#include <chrono>
 
 void DbConn::query(const std::string& sql) {
     if (mysql_query(conn_, sql.c_str()) != 0) {
@@ -32,30 +33,50 @@ std::string DbConn::escape(const std::string& s) {
     return buf;
 }
 
+MYSQL* DbPool::create_connection() {
+    MYSQL* conn = mysql_init(nullptr);
+    if (!conn) {
+        LOG_ERROR("DB pool: mysql_init() failed");
+        throw std::runtime_error("mysql_init failed");
+    }
+    mysql_options(conn, MYSQL_SET_CHARSET_NAME, "utf8mb4");
+    if (!mysql_real_connect(conn, host_.c_str(), user_.c_str(), pass_.c_str(),
+                            db_.c_str(), port_, nullptr, 0)) {
+        std::string err = mysql_error(conn);
+        mysql_close(conn);
+        LOG_ERROR("DB pool: mysql_real_connect() failed: " + err);
+        throw std::runtime_error("MySQL connect failed: " + err);
+    }
+    if (mysql_query(conn, "SET time_zone = '+08:00'") != 0) {
+        std::string err = mysql_error(conn);
+        mysql_close(conn);
+        LOG_ERROR("DB pool: SET time_zone failed: " + err);
+        throw std::runtime_error("MySQL set time_zone failed: " + err);
+    }
+    return conn;
+}
+
+bool DbPool::validate_connection(MYSQL* conn) {
+    if (mysql_ping(conn) == 0) return true;
+    LOG_WARNING("DB pool: stale connection detected, will replace");
+    mysql_close(conn);
+    return false;
+}
+
+MYSQL* DbPool::get_valid_connection() {
+    while (!pool_.empty()) {
+        MYSQL* conn = pool_.front();
+        pool_.pop();
+        if (validate_connection(conn)) return conn;
+    }
+    return create_connection();
+}
+
 DbPool::DbPool(const std::string& host, int port, const std::string& user,
                const std::string& pass, const std::string& db, int size)
-    : pool_size_(size) {
+    : host_(host), port_(port), user_(user), pass_(pass), db_(db), pool_size_(size) {
     for (int i = 0; i < size; ++i) {
-        MYSQL* conn = mysql_init(nullptr);
-        if (!conn) {
-            LOG_ERROR("DB pool: mysql_init() failed for connection " + std::to_string(i));
-            throw std::runtime_error("mysql_init failed");
-        }
-        mysql_options(conn, MYSQL_SET_CHARSET_NAME, "utf8mb4");
-        if (!mysql_real_connect(conn, host.c_str(), user.c_str(), pass.c_str(),
-                                db.c_str(), port, nullptr, 0)) {
-            std::string err = mysql_error(conn);
-            mysql_close(conn);
-            LOG_ERROR("DB pool: mysql_real_connect() failed: " + err);
-            throw std::runtime_error("MySQL connect failed: " + err);
-        }
-        if (mysql_query(conn, "SET time_zone = '+08:00'") != 0) {
-            std::string err = mysql_error(conn);
-            mysql_close(conn);
-            LOG_ERROR("DB pool: SET time_zone failed: " + err);
-            throw std::runtime_error("MySQL set time_zone failed: " + err);
-        }
-        pool_.push(conn);
+        pool_.push(create_connection());
     }
     LOG_INFO("DB pool initialized with " + std::to_string(size) + " connections to " + host + ":" + std::to_string(port) + "/" + db);
 }
@@ -68,11 +89,12 @@ DbPool::~DbPool() {
     LOG_INFO("DB pool destroyed");
 }
 
-std::shared_ptr<DbConn> DbPool::acquire() {
+std::shared_ptr<DbConn> DbPool::acquire(int timeout_ms) {
     std::unique_lock<std::mutex> lock(mutex_);
-    cv_.wait(lock, [this]{ return !pool_.empty(); });
-    MYSQL* conn = pool_.front();
-    pool_.pop();
+    if (!cv_.wait_for(lock, std::chrono::milliseconds(timeout_ms), [this]{ return !pool_.empty(); })) {
+        throw std::runtime_error("DB pool: acquire timeout after " + std::to_string(timeout_ms) + "ms, all connections busy");
+    }
+    MYSQL* conn = get_valid_connection();
     return std::shared_ptr<DbConn>(new DbConn(conn), [this](DbConn* dc) {
         release(dc->get());
         delete dc;
