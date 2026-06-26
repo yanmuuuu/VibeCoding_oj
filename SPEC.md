@@ -10,7 +10,9 @@
 | **前端** | 原生 HTML + CSS + JS（SPA + Hash 路由）+ ACE Editor (CDN) |
 | **后端** | C++ (cpp-httplib) 一体化：API Server + 静态文件 + ctemplate 模板 |
 | **数据库** | MySQL |
-| **部署** | 单机 |
+| **部署** | 单机：Nginx 反代 + HTTPS（Let's Encrypt）+ systemd 常驻；详见 `deploy/运维手册.md` |
+| **线上地址** | https://rinr.top |
+| **协作方式** | 程序员主导需求/验收/部署，AI（Cursor）辅助实现与迭代；见 `README.md` |
 
 ---
 
@@ -76,7 +78,12 @@
 
 ### 2.7 讨论系统
 
-（内容同上，保持不变）
+- **大讨论** `#/discussions`：卡片式信息流，Markdown 发帖，20 条/页
+- **帖子详情** `#/discussions/:id`：Markdown 渲染、二级嵌套回复、点赞 toggle
+- **题目讨论 Tab**：题目详情页「讨论」Tab，交互与大讨论一致（列表 + 详情 + 发帖）
+- **权限**：本人可删自己的帖/回复；管理员可删任意帖/回复
+- **管理**：管理员讨论 Tab 支持搜索、删帖、删回复、跳转原帖
+- **API**：`/api/discussions/*`、`/api/problems/:id/comments/*`（见第 6 节）
 
 ### 2.8 排行榜
 
@@ -101,8 +108,23 @@
 ## 3. 延迟功能（V2）
 
 - 通过率统计
-- 多语言支持
-- Docker 化部署
+- 多语言判题（Java/Python 等）
+- Docker 化部署（当前为 systemd + Nginx 裸机部署）
+
+---
+
+## 3.1 生产部署（已实现）
+
+| 组件 | 说明 |
+|------|------|
+| **域名** | `rinr.top` / `www.rinr.top` |
+| **HTTPS** | Certbot + Let's Encrypt 自动续期 |
+| **进程管理** | `systemd` 服务 `vibeoj`，开机自启 |
+| **配置** | `deploy/production.env`（不入 Git） |
+| **本地测试** | `make run-local` → `:8081`，读 `deploy/local.env` |
+| **上线更新** | `bash deploy/update-prod.sh`（停服 → pull → 编译 → 启服） |
+
+完整运维命令见 **`deploy/运维手册.md`**。
 
 ---
 
@@ -620,21 +642,35 @@ CREATE TABLE messages (
 ```
 MioOJ/
 ├── SPEC.md
+├── README.md                         # 项目介绍（人机协作开发叙事）
+├── interview.md                      # 面试问答参考
+├── .gitignore
+├── deploy/                           # 部署脚本与运维文档
+│   ├── config.example.env            # 环境变量模板
+│   ├── local.env / production.env    # 本地/生产配置（不入 Git）
+│   ├── start.sh                      # 启动 vibeoj（读 env）
+│   ├── install.sh                    # 首次：Nginx + systemd
+│   ├── update-prod.sh                # 日常：停服 → pull → 编译 → 启服
+│   ├── install-https.sh              # 阿里云证书 HTTPS（可选）
+│   └── 运维手册.md                    # 更新/暂停/重启/日志速查
 ├── CMakeLists.txt                    # CMake 构建配置
-├── Makefile                          # Makefile 构建配置（二选一）
-├── vibeoj                            # 编译产物（二进制）
+├── Makefile                          # Makefile 构建（常用）
+├── vibeoj                            # 编译产物（二进制，不入 Git 推荐）
 ├── build/                            # CMake 构建目录
 ├── server/
 │   ├── main.cpp                      # 入口：HTTP 服务 + 路由注册 + SPA 渲染
-│   ├── config.hpp                    # 全局配置（端口 8080、数据库连接、默认限制）
+│   ├── config.hpp                    # 非敏感默认配置
+│   ├── util/config_loader.hpp        # 从环境变量加载 VIBEOJ_* 配置
 │   ├── include/
 │   │   └── httplib.h                # cpp-httplib (header-only)
 │   ├── db/
 │   │   ├── pool.hpp/.cpp            # MySQL 连接池（线程安全，RAII 封装）
 │   │   ├── schema.sql               # 建表脚本（14 张表）
 │   │   ├── seed.sql                 # 种子数据（2 道示例题 + 15 个测试点）
-│   │   ├── migrate_phase13.sql      # Phase 13 迁移：新增 conversations + messages 表
-│   │   └── migrate_phase27.sql      # Phase 27 迁移：questions.reference_code + users.is_banned
+│   │   ├── migrate_phase13.sql      # Phase 13：conversations + messages
+│   │   ├── migrate_phase27.sql      # Phase 27：reference_code + is_banned
+│   │   ├── migrate_phase30.sql      # Phase 30：messages.is_recalled
+│   │   └── migrate_phase31.sql      # Phase 31：questions.display_index
 │   ├── handler/
 │   │   ├── auth.cpp                  # 注册（Argon2id 哈希）、登录（Token+Cookie）、退出
 │   │   ├── problem.cpp               # 题目列表（仅 is_visible=1）、题目详情
@@ -668,11 +704,11 @@ MioOJ/
 │   ├── avatars/                       # 头像目录：系统默认头像 (at*.webp) + 用户自定义头像 (user_*.*)
 │   ├── index.html                    # SPA 入口（ctemplate 渲染 → Hash Router 接管，含 ACE CDN 引入；页面加载时随机设置 favicon）
 │   ├── css/
-│   │   └── style.css                 # 全局样式（LeetCode 风格简约浅色主题）
+│   │   └── style_v2.css              # 主样式（相册黑金 + LeetCode 白模式双主题）
 │   └── js/
 │       ├── router.js                 # Hash Router：路由匹配、Auth 守卫、页面调度、设置面板
 │       ├── api.js                    # HTTP 请求封装（fetch + JSON）
-│       ├── utils.js                  # DOM 工具函数
+│       ├── utils.js                  # DOM 工具、showConfirm/Alert、codeDraftStorageKey
 │       ├── effects.js               # 背景管理系统（系统相册+自定义上传+图片裁剪+图片预加载+登录后刷新+虚化滑块+LeetCode白模式切换+使用我的壁纸开关）
 │       ├── pages/
 │       │   ├── login.js              # 登录页
@@ -1277,6 +1313,13 @@ MioOJ/
 - [x] `localStorage` 键由 `code_{题目ID}` 改为 `code_{用户ID}_{题目ID}`（`utils.js` → `codeDraftStorageKey()`）
 - [x] 同浏览器切换账号后，各用户恢复各自草稿，不再串用他人代码
 
+### Phase 33 — 生产部署与文档 ✅
+- [x] 环境变量配置：`deploy/*.env` + `config_loader.hpp`，敏感信息不入 Git
+- [x] systemd + Nginx 反代 + Let's Encrypt HTTPS（`rinr.top`）
+- [x] `deploy/update-prod.sh` 安全更新（先 stop 再编译再 start，避免端口冲突）
+- [x] `deploy/运维手册.md`：更新/暂停/重启/日志速查
+- [x] `README.md` / `interview.md` 项目说明与面试参考
+
 ## 12. 验收标准
 
 | 编号 | 验收项 | 标准 |
@@ -1534,15 +1577,17 @@ make
 ### 14.6 日常开发运行
 
 ```bash
-# CMake 方式
-cd build && make -j$(nproc) && cd .. && ./build/vibeoj
+# 本地测试（端口 8081，读 deploy/local.env）
+make clean && make && make run-local
 
-# Makefile 方式
-make && ./vibeoj
+# 生产更新（服务器上：停服 → pull → 编译 → 启服）
+bash deploy/update-prod.sh
 
-# 一键（Makefile）
-make run    # 自动创建 /tmp/oj 临时目录并启动
+# 仅编译 + 手动重启生产
+make -j$(nproc) && sudo systemctl restart vibeoj
 ```
+
+详见 **`deploy/运维手册.md`**。
 
 ### 14.7 配置说明
 
