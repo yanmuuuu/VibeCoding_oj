@@ -11,6 +11,7 @@ async function renderAdmin(main) {
     else if (hash === '/admin/users') currentTab = 'users';
     else if (hash === '/admin/announcements') currentTab = 'announcements';
     else if (hash === '/admin/discussions') currentTab = 'discussions';
+    else if (hash === '/admin/proposals') currentTab = 'proposals';
 
     main.innerHTML = `<div class="page-container">
         <a href="#/problems" class="back-link">← 返回题目列表</a>
@@ -21,6 +22,7 @@ async function renderAdmin(main) {
             <a href="#/admin/users" class="admin-tab${currentTab==='users'?' active':''}" data-tab="users">用户管理</a>
             <a href="#/admin/announcements" class="admin-tab${currentTab==='announcements'?' active':''}" data-tab="announcements">公告管理</a>
             <a href="#/admin/discussions" class="admin-tab${currentTab==='discussions'?' active':''}" data-tab="discussions">讨论管理</a>
+            <a href="#/admin/proposals" class="admin-tab${currentTab==='proposals'?' active':''}" data-tab="proposals">录题审核</a>
         </div>
         <div id="admin-content"></div>
     </div>`;
@@ -39,6 +41,7 @@ async function renderAdmin(main) {
             else if (t === 'users') loadUsers(content);
             else if (t === 'announcements') loadAnnouncements(content);
             else if (t === 'discussions') loadDiscussions(content);
+            else if (t === 'proposals') loadProposals(content);
         });
     });
 
@@ -48,6 +51,7 @@ async function renderAdmin(main) {
     else if (currentTab === 'users') loadUsers(content);
     else if (currentTab === 'announcements') loadAnnouncements(content);
     else if (currentTab === 'discussions') loadDiscussions(content);
+    else if (currentTab === 'proposals') loadProposals(content);
 }
 
 async function loadStats(content) {

@@ -5,15 +5,26 @@
     var MODE_KEY = 'vibeoj_bg_mode';
     var BLUR_KEY = 'vibeoj_bg_blur';
     var USE_CUSTOM_KEY = 'vibeoj_use_custom_bg';
+    var PREFS_VERSION_KEY = 'vibeoj_prefs_version';
+    var PREFS_VERSION = '2';
+
+    if (localStorage.getItem(PREFS_VERSION_KEY) !== PREFS_VERSION) {
+        localStorage.setItem(MODE_KEY, 'leet');
+        localStorage.setItem(USE_CUSTOM_KEY, '0');
+        localStorage.setItem(BLUR_KEY, '0');
+        localStorage.removeItem('vibeoj_custom_bg_url');
+        localStorage.setItem('miooj_editor_theme', 'ace/theme/chrome');
+        localStorage.setItem(PREFS_VERSION_KEY, PREFS_VERSION);
+    }
 
     var bgMode = localStorage.getItem(MODE_KEY);
-    if (bgMode === null) bgMode = 'album';
+    if (bgMode === null) bgMode = 'leet';
     bgMode = bgMode === 'album' ? 'album' : 'leet';
 
     var blurPx = parseInt(localStorage.getItem(BLUR_KEY)) || 0;
 
     var useCustomBg = localStorage.getItem(USE_CUSTOM_KEY);
-    if (useCustomBg === null || useCustomBg === '') useCustomBg = null;
+    if (useCustomBg === null || useCustomBg === '') useCustomBg = 'false';
     else if (useCustomBg === '0') useCustomBg = 'false';
     else useCustomBg = null;
     var cachedCustomBgUrl = localStorage.getItem('vibeoj_custom_bg_url');
@@ -187,9 +198,9 @@
             cachedCustomBgUrl = null;
             localStorage.setItem('vibeoj_custom_bg_url', '');
 
-            bgMode = 'album';
-            localStorage.setItem(MODE_KEY, 'album');
-            applyMode('album');
+            bgMode = 'leet';
+            localStorage.setItem(MODE_KEY, 'leet');
+            applyMode('leet');
 
             applyBlur(0);
             var blurSlider = document.getElementById('blur-slider');
@@ -198,9 +209,9 @@
             if (blurLabel) blurLabel.textContent = '0px';
 
             var toggleEff = document.getElementById('toggle-effects');
-            if (toggleEff) toggleEff.classList.add('on');
+            if (toggleEff) toggleEff.classList.remove('on');
 
-            fetchSystemBackgrounds();
+            localStorage.setItem('miooj_editor_theme', 'ace/theme/chrome');
             updateUseCustomBgToggle();
             return true;
         });

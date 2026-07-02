@@ -8,7 +8,7 @@
 
 ### Q1：用 1 分钟介绍这个项目。
 
-**答：** MioOJ 是我做的 C++ 在线判题系统，类似 LeetCode 的 ACM 模式。用户注册登录后可以浏览题目、在 ACE 编辑器里写 C++、提交后自动判题，返回 AC/WA/TLE 等结果。除了 OJ 核心，还有排行榜、讨论区、私信、公告和管理员录题后台。后端是 C++ 单进程（cpp-httplib）+ MySQL，前端是原生 JS SPA，部署在阿里云，域名 **https://rinr.top**，Nginx + HTTPS + systemd。项目从 SPEC 驱动开发，我和 Cursor AI 结对完成实现与上线。
+**答：** MioOJ 是我做的 C++ 在线判题系统，类似 LeetCode 的 ACM 模式。用户注册登录后可以浏览题目、在 ACE 编辑器里写 C++、提交后自动判题，返回 AC/WA/TLE 等结果。除了 OJ 核心，还有排行榜、讨论区、私信、公告、**用户录题（管理员审核）**和管理员录题后台。后端是 C++ 单进程（cpp-httplib）+ MySQL，前端是原生 JS SPA，部署在阿里云，域名 **https://rinr.top**，Nginx + HTTPS + systemd。项目从 SPEC 驱动开发，我和 Cursor AI 结对完成实现与上线。
 
 ---
 
@@ -132,7 +132,7 @@
 
 ### Q18：有哪些核心表？
 
-**答：** `users`、`sessions`、`questions`（含 display_index、reference_code）、`test_cases`、`submissions`、`announcements`；讨论相关 `discussions`、回复、点赞；私信 `conversations`、`messages`（含 is_recalled）；题目评论多一套 comment 表。详见 SPEC 第 5 节。
+**答：** `users`、`sessions`、`questions`（含 display_index、reference_code）、`test_cases`、`submissions`、`announcements`；讨论相关 `discussions`、回复、点赞；私信 `conversations`、`messages`（含 is_recalled）；题目评论多一套 comment 表；**用户录题** `problem_proposals` + `proposal_test_cases`。详见 SPEC 第 5 节。
 
 ---
 
@@ -148,7 +148,7 @@
 
 **答（示例，可结合真实经历）：**
 1. **判题稳定性**：fork/wait、临时文件清理、编译超时  
-2. **录题流程**：标程生成期望输出、发布前校验用例+标程  
+2. **录题流程**：标程生成期望输出、发布前校验用例+标程；**用户录题**走审核流（用户填基本信息 → 管理员补标程/用例 → 通过/不通过+理由）  
 3. **部署**：环境变量、systemd 与手动进程端口冲突 → update 脚本先 stop  
 4. **体验**：localStorage 草稿未按用户隔离 → 改为 userId 维度  
 
@@ -196,6 +196,8 @@
 | vibeoj | 后端二进制名 |
 | mio-dialog | 统一确认/提示弹窗 |
 | update-prod.sh | 生产安全更新脚本 |
+| problem_proposals | 用户录题申请（pending/approved/rejected） |
+| proposal_test_cases | 审核阶段的测试用例，通过后复制到 test_cases |
 
 ---
 

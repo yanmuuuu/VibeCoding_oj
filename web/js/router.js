@@ -47,6 +47,7 @@ const App = {
         const navDiscussions = $('#nav-discussions');
         const navLeaderboard = $('#nav-leaderboard');
         const navMessages = $('#nav-messages');
+        const navProposalsSubmit = $('#nav-proposals-submit');
         const navAdmin = $('#nav-admin');
         const navUser = $('#nav-user');
         const navLogin = $('#nav-login');
@@ -61,6 +62,7 @@ const App = {
             if (navLeaderboard) navLeaderboard.style.display = '';
             if (navDiscussions) navDiscussions.style.display = '';
             if (navMessages) navMessages.style.display = '';
+            if (navProposalsSubmit) navProposalsSubmit.style.display = this.user.is_admin ? 'none' : '';
             if (navAdmin) navAdmin.style.display = this.user.is_admin ? '' : 'none';
             if (navUser) navUser.style.display = this.user.is_admin ? 'none' : '';
             if (navLogin) navLogin.style.display = 'none';
@@ -71,6 +73,7 @@ const App = {
             if (navLeaderboard) navLeaderboard.style.display = 'none';
             if (navDiscussions) navDiscussions.style.display = 'none';
             if (navMessages) navMessages.style.display = 'none';
+            if (navProposalsSubmit) navProposalsSubmit.style.display = 'none';
             if (navAdmin) navAdmin.style.display = 'none';
             if (navUser) navUser.style.display = 'none';
             if (navLogin) navLogin.style.display = '';
@@ -82,12 +85,13 @@ const App = {
         if (hash === '/problems' || hash.indexOf('/problems/') === 0) activeId = 'nav-problems';
         else if (hash === '/announcements') activeId = 'nav-announcements';
         else if (hash === '/discussions' || hash.indexOf('/discussions/') === 0) activeId = 'nav-discussions';
-        else if (hash === '/user') activeId = 'nav-user';
+        else if (hash === '/proposals/submit' || hash.indexOf('/proposals/edit/') === 0) activeId = 'nav-proposals-submit';
+        else if (hash === '/user' || hash === '/proposals') activeId = 'nav-user';
         else if (hash === '/leaderboard') activeId = 'nav-leaderboard';
         else if (hash === '/messages') activeId = 'nav-messages';
         else if (hash.indexOf('/admin') === 0) activeId = 'nav-admin';
         else if (hash === '/login' || hash === '/register') activeId = 'nav-login';
-        ['nav-problems', 'nav-announcements', 'nav-discussions', 'nav-user', 'nav-admin', 'nav-login', 'nav-leaderboard', 'nav-messages'].forEach(function(id) {
+        ['nav-problems', 'nav-announcements', 'nav-discussions', 'nav-user', 'nav-admin', 'nav-login', 'nav-leaderboard', 'nav-messages', 'nav-proposals-submit'].forEach(function(id) {
             var el = document.getElementById(id);
             if (el) el.classList.toggle('nav-active', id === activeId);
         });
@@ -133,10 +137,13 @@ const App = {
             '/admin/users': 'admin',
             '/admin/announcements': 'admin',
             '/admin/discussions': 'admin',
+            '/admin/proposals': 'admin',
             '/announcements': 'announcements',
             '/discussions': 'discussions',
             '/leaderboard': 'leaderboard',
             '/messages': 'messages',
+            '/proposals': 'proposalList',
+            '/proposals/submit': 'proposalSubmit',
             '/404': 'notFound',
         };
 
@@ -157,6 +164,18 @@ const App = {
             } else if (path.startsWith('/users/')) {
                 page = 'userProfile';
                 main.dataset.userId = path.split('/')[2];
+            } else if (path.startsWith('/admin/proposals/')) {
+                const parts = path.split('/');
+                const id = parts[3];
+                if (id && !isNaN(id)) {
+                    page = 'adminProposalReview';
+                    main.dataset.proposalId = id;
+                } else {
+                    page = 'admin';
+                }
+            } else if (path.startsWith('/proposals/edit/')) {
+                page = 'proposalSubmit';
+                main.dataset.proposalId = path.split('/')[3];
             } else if (path.startsWith('/admin/questions/')) {
                 const parts = path.split('/');
                 const id = parts[3];
@@ -192,6 +211,9 @@ const App = {
                 case 'discussionDetail': await renderDiscussionDetail(main); break;
                 case 'leaderboard': await renderLeaderboard(main); break;
                 case 'messages': await renderMessages(main, { peerUserId: peerUserId }); break;
+                case 'proposalList': await renderProposalList(main); break;
+                case 'proposalSubmit': await renderProposalSubmit(main); break;
+                case 'adminProposalReview': await renderAdminProposalReview(main); break;
                 case 'userProfile': await renderUserProfile(main); break;
                 default: renderNotFound(main); break;
             }
@@ -255,7 +277,7 @@ function initSettings() {
     });
 
     var bgMode = localStorage.getItem('vibeoj_bg_mode');
-    if (bgMode === null) bgMode = 'album';
+    if (bgMode === null) bgMode = 'leet';
     if (bgMode === 'album') {
         toggleEff.classList.add('on');
     } else {

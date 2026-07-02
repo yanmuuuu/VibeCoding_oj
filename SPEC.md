@@ -46,7 +46,7 @@
 - 统计语义："通过" = 有 AC 记录的题目数，"尝试" = 有提交但无 AC 的题目数（二者互斥不重复计数）
 
 ### 2.5 后台管理（管理员）
-- Tab 导航布局：统计 | 题目管理 | 用户管理 | 公告管理 | **讨论管理**
+- Tab 导航布局：统计 | 题目管理 | 用户管理 | 公告管理 | 讨论管理 | **录题审核**
 - **统计仪表盘**：总用户数、总题目数、总提交数 + **最近动态**（最新提交/新用户/新讨论各 10 条）
 - **题目管理**：列表（含难度/可见/隐藏）、批量操作、**三步向导新建**（基本信息 → 标程 → 测试用例，可暂存草稿）、**单页编辑**
 - **录题/标程**：`questions.reference_code` 持久化；ACE 编辑器录入 C++ 标程；一键编译运行生成期望输出并 **AC 校验**
@@ -58,8 +58,9 @@
 - **用户管理**：列表（分页+搜索）、删除用户（级联删库 + 清理 `user_*` 文件）、升降管理员、**封禁/解封**（立即踢 session）、**管理员重置密码**（设定新密码并清 session）
 - **讨论管理**：列表 + 搜索、删帖/删回复、跳转原帖
 - **系统公告**：管理员发布/编辑/删除公告
+- **用户录题**：普通用户提交题目基本信息（标题/描述/样例/限制等）→ 管理员审核补充标程与测试用例 → 通过则创建正式题目（可选立即发布或隐藏草稿）；不通过可附理由，用户可修改后重新提交；最多 3 条待审核
 - **管理员导航栏**：隐藏「我的」链接，显示：题目 | 排行榜 | 公告 | 讨论 | 管理 | 退出 + 私信图标
-- **普通用户导航栏**：题目 | 排行榜 | 公告 | 讨论 | 我的 | 退出 + 私信图标（含未读计数角标）
+- **普通用户导航栏**：题目 | 排行榜 | 公告 | 讨论 | **录题** | 我的 | 退出 + 私信图标（含未读计数角标）
 - **未登录导航栏**：公告 | 讨论 | 登录（公告和讨论为公开页）
 - 管理页需要管理员权限
 
@@ -360,7 +361,47 @@ CREATE TABLE comment_likes (
 );
 ```
 
-### 5.13 conversations — 私信会话
+### 5.14 problem_proposals — 用户录题申请
+```sql
+CREATE TABLE problem_proposals (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    user_id         INT          NOT NULL,
+    title           VARCHAR(256) NOT NULL,
+    description     TEXT         NOT NULL,
+    input_format    TEXT,
+    output_format   TEXT,
+    sample_input    TEXT,
+    sample_output   TEXT,
+    difficulty      ENUM('简单','中等','困难') NOT NULL DEFAULT '简单',
+    time_limit      INT          NOT NULL DEFAULT 1,
+    memory_limit    INT          NOT NULL DEFAULT 256,
+    reference_code  TEXT         DEFAULT NULL,       -- 管理员审核时补充
+    status          ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+    admin_reason    TEXT         DEFAULT NULL,       -- 通过/不通过说明
+    question_id     INT          DEFAULT NULL,       -- 通过后关联的正式题目
+    reviewed_by     INT          DEFAULT NULL,
+    reviewed_at     DATETIME     DEFAULT NULL,
+    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE SET NULL,
+    FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+);
+```
+
+### 5.15 proposal_test_cases — 录题审核用测试用例（通过后复制到 test_cases）
+```sql
+CREATE TABLE proposal_test_cases (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    proposal_id     INT  NOT NULL,
+    input_data      TEXT NOT NULL,
+    expected_output TEXT NOT NULL,
+    order_index     INT  NOT NULL DEFAULT 0,
+    FOREIGN KEY (proposal_id) REFERENCES problem_proposals(id) ON DELETE CASCADE
+);
+```
+
+### 5.16 conversations — 私信会话
 ```sql
 CREATE TABLE conversations (
     id              INT AUTO_INCREMENT PRIMARY KEY,
@@ -374,7 +415,7 @@ CREATE TABLE conversations (
 );
 ```
 
-### 5.14 messages — 私信消息
+### 5.17 messages — 私信消息
 ```sql
 CREATE TABLE messages (
     id              INT AUTO_INCREMENT PRIMARY KEY,
@@ -428,6 +469,10 @@ CREATE TABLE messages (
 | GET | `/api/user/ac-codes/:question_id` | 获取用户在某题下所有 AC 提交的代码列表（返回 [{id, code, total_time, total_memory, created_at}]，按提交时间倒序） | 需要 |
 | POST | `/api/user/avatar/upload` | 上传自定义头像（multipart form，field: avatar），裁剪后提交（1:1 正方形） | 需要 |
 | DELETE | `/api/user/avatar` | 删除自定义头像 → 重新随机分配一个系统默认头像 | 需要 |
+| GET | `/api/user/proposals` | 我的录题申请列表（含状态、审核说明、关联题号） | 需要 |
+| POST | `/api/user/proposals` | 提交录题（仅基本信息；最多 3 条待审核） | 需要 |
+| GET | `/api/user/proposals/:id` | 单条录题详情 | 需要（本人） |
+| PUT | `/api/user/proposals/:id` | 修改未通过录题并重新提交（status → pending） | 需要（本人，仅 rejected） |
 
 ### 6.5 背景管理
 
@@ -464,6 +509,15 @@ CREATE TABLE messages (
 | POST | `/api/admin/announcements` | 发布公告 | 需要 + admin |
 | PUT | `/api/admin/announcements/:id` | 编辑公告 | 需要 + admin |
 | DELETE | `/api/admin/announcements/:id` | 删除公告 | 需要 + admin |
+| GET | `/api/admin/proposals` | 录题申请列表（参数: status=pending/approved/rejected/all） | 需要 + admin |
+| GET | `/api/admin/proposals/:id` | 单条录题详情（含提交者用户名） | 需要 + admin |
+| PUT | `/api/admin/proposals/:id` | 审核前补充/修改题目信息与标程（仅 pending） | 需要 + admin |
+| GET | `/api/admin/proposals/:id/testcases` | 获取审核用测试用例 | 需要 + admin |
+| POST | `/api/admin/proposals/:id/testcases` | 添加审核用测试用例 | 需要 + admin |
+| PUT | `/api/admin/proposals/:id/testcases/:tc_id` | 编辑审核用测试用例 | 需要 + admin |
+| DELETE | `/api/admin/proposals/:id/testcases/:tc_id` | 删除审核用测试用例 | 需要 + admin |
+| POST | `/api/admin/proposals/:id/approve` | 通过审核（body: {reason, publish_immediately}；须标程+≥1用例） | 需要 + admin |
+| POST | `/api/admin/proposals/:id/reject` | 不通过（body: {reason}，必填） | 需要 + admin |
 
 ### 6.7 公告（公开）
 
@@ -615,9 +669,12 @@ CREATE TABLE messages (
 | `#/problems` | 题目列表 | 需要登录 |
 | `#/problems/:id` | 题目详情 + 提交区 | 左右分栏：左题目描述，右 ACE 代码编辑器 |
 | `#/result/:submissionId` | 判题结果页 | 测试点方块网格 + 详情展开（提交后跳转到此页） |
-| `#/user` | 用户中心 | 提交历史（管理员不可见，导航栏隐藏） |
+| `#/user` | 用户中心 | 我的录题摘要 + 提交历史（管理员不可见，导航栏隐藏） |
+| `#/proposals` | 我的录题 | 录题申请列表：待审核/已通过/未通过 + 审核说明 |
+| `#/proposals/submit` | 提交录题 | 填写基本信息（Markdown 描述），标程/用例由管理员补充 |
+| `#/proposals/edit/:id` | 修改录题 | 仅未通过记录可修改后重新提交 |
 | `#/announcements` | 系统公告页 | 公开页面，展示所有公告 |
-| `#/admin` | 后台管理首页 | 仅管理员，Tab：统计/题目/用户/公告/讨论 |
+| `#/admin` | 后台管理首页 | 仅管理员，Tab：统计/题目/用户/公告/讨论/录题审核 |
 | `#/admin/stats` | 管理员 → 统计 | |
 | `#/admin/questions` | 管理员 → 题目管理 | 列表+批量操作+创建 |
 | `#/admin/announcements` | 管理员 → 公告管理 | 发布/编辑/删除公告 |
@@ -625,6 +682,8 @@ CREATE TABLE messages (
 | `#/admin/questions/:id` | 管理员 → 编辑题目 | 单页：基本信息+Markdown预览+ACE标程+测试用例+预览做题页 |
 | `#/admin/users` | 管理员 → 用户管理 | 分页+搜索+封禁+重置密码+删除 |
 | `#/admin/discussions` | 管理员 → 讨论管理 | 搜索+删帖/删回复 |
+| `#/admin/proposals` | 管理员 → 录题审核 | 按状态筛选待审核/已通过/未通过 |
+| `#/admin/proposals/:id` | 管理员 → 审核单条录题 | 补充标程+测试用例，通过/不通过 |
 | `#/discussions` | 大讨论列表页 | 卡片式信息流，20条/页，需要登录 |
 | `#/discussions/:id` | 帖子详情页 | Markdown 正文渲染 + 回复列表（二级嵌套）+ 点赞 |
 | `#/leaderboard` | 排行榜页 | Top 100 积分排名表格（仅 >0 分用户）+ 当前用户积分/名次卡片，需要登录 |
@@ -671,6 +730,7 @@ MioOJ/
 │   │   ├── migrate_phase27.sql      # Phase 27：reference_code + is_banned
 │   │   ├── migrate_phase30.sql      # Phase 30：messages.is_recalled
 │   │   └── migrate_phase31.sql      # Phase 31：questions.display_index
+│   │   └── migrate_phase34.sql      # Phase 34：problem_proposals + proposal_test_cases
 │   ├── handler/
 │   │   ├── auth.cpp                  # 注册（Argon2id 哈希）、登录（Token+Cookie）、退出
 │   │   ├── problem.cpp               # 题目列表（仅 is_visible=1）、题目详情
@@ -685,6 +745,7 @@ MioOJ/
 │   │   ├── comment.cpp                 # 题目评论区：评论 CRUD + 回复 + 点赞（`handler/comment.cpp`）
 │   │   ├── leaderboard.cpp              # 排行榜：Top 100 积分排名 + 当前用户排名（`handler/leaderboard.cpp`）
 │   │   ├── message.cpp                  # 私信/消息：会话 CRUD + 消息收发 + 未读计数 + 用户搜索（`handler/message.cpp`）
+│   │   ├── proposal.cpp                 # 用户录题申请 + 管理员审核（`handler/proposal.cpp`）
 │   ├── judge/
 │   │   ├── engine.hpp/.cpp           # 判题引擎：接收任务 → 编译 → 遍历测试点 → 运行 → 写结果
 │   │   ├── compiler.hpp/.cpp         # 编译模块：临时文件 → g++ -O2 -std=c++17 → 超时 10s
@@ -720,6 +781,9 @@ MioOJ/
 │       │   ├── admin.js              # 后台管理首页 Tab 布局（统计 + 题目管理 + 批量操作）
 │       │   ├── adminQuestions.js     # 新建题目表单（Tab 内嵌或独立打开）
 │       │   ├── adminQuestionEdit.js  # 编辑题目 + 测试用例管理（行内编辑）+ 标程自动生成
+│       │   ├── adminProposalReview.js # 管理员审核用户录题
+│       │   ├── proposalSubmit.js     # 用户提交/修改录题
+│       │   ├── proposalList.js       # 用户录题列表
 │       │   ├── adminUsers.js         # 用户管理（分页+搜索+权限切换+删除）
 │       │   ├── adminAnnouncements.js # 公告管理（发布+编辑+删除）
 │       │   ├── announcements.js      # 公示公告展示页
@@ -1320,6 +1384,13 @@ MioOJ/
 - [x] `deploy/运维手册.md`：更新/暂停/重启/日志速查
 - [x] `README.md` / `interview.md` 项目说明与面试参考
 
+### Phase 34 — 用户录题与管理员审核 ✅
+- [x] 数据库：`problem_proposals` + `proposal_test_cases`（`migrate_phase34.sql`）
+- [x] 用户 API：提交/列表/详情/修改重提（仅 rejected）；最多 3 条 pending
+- [x] 管理员 API：列表/详情/补充编辑/审核用例 CRUD/通过/不通过
+- [x] 通过时创建 `questions` + 复制测试用例；可选 `publish_immediately` 或隐藏草稿
+- [x] 前端：`#/proposals/submit`、`#/proposals`、`#/admin/proposals`、审核详情页；导航栏「录题」；用户中心摘要
+
 ## 12. 验收标准
 
 | 编号 | 验收项 | 标准 |
@@ -1415,6 +1486,9 @@ MioOJ/
 | AC-89 | 测试用例连续添加 | 录题向导/编辑页添加用例后表单清空并可继续添加；`order_index` 从 0 自动递增 |
 | AC-90 | 删用例确认弹窗 | 删除测试用例前弹出 `showConfirm`；LeetCode 白模式下为白底简约卡片，非相册黑金背景 |
 | AC-91 | 代码草稿隔离 | 账号 A/B 在同一浏览器交替登录同一题，编辑器分别恢复各自草稿，互不可见 |
+| AC-92 | 用户录题提交 | 登录用户可提交基本信息录题，导航栏「录题」入口；最多 3 条待审核 |
+| AC-93 | 录题状态查看 | `#/proposals` 展示待审核/已通过/未通过及审核说明；未通过可修改重提 |
+| AC-94 | 管理员录题审核 | 管理后台「录题审核」Tab；可补充标程+用例；通过创建题目（可选立即发布）；不通过须填理由 |
 
 ---
 
@@ -1547,6 +1621,9 @@ mysql -u VibeOJUser -p vibeoj < server/db/migrate_phase30.sql
 
 # 导入 Phase 31 迁移（题目 display_index 展示编号）
 mysql -u VibeOJUser -p vibeoj < server/db/migrate_phase31.sql
+
+# 导入 Phase 34 迁移（用户录题 problem_proposals）
+mysql -u VibeOJUser -p vibeoj < server/db/migrate_phase34.sql
 
 # =============================================
 # 步骤 4: 编译项目

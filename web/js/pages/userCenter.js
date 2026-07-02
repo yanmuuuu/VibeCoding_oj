@@ -12,7 +12,10 @@ async function renderUserCenter(main) {
             </div>
             <input type="file" id="user-avatar-upload-input" accept="image/*" style="display:none;">
         </div>
-        <h3>问题状态</h3>
+        <h3>我的录题</h3>
+        <p class="admin-hint" style="margin-bottom:12px;">查看录题审核状态，或 <a href="#/proposals/submit">提交新题目</a></p>
+        <div id="my-proposals-area"><p>加载中...</p></div>
+        <h3 style="margin-top:24px;">问题状态</h3>
         <div id="submission-stats" style="margin-bottom:16px;font-size:0.9em;color:#666;"></div>
         <table class="data-table">
             <thead><tr><th>#</th><th>题目</th><th>难度</th><th>状态</th><th>提交次数</th></tr></thead>
@@ -42,6 +45,32 @@ async function renderUserCenter(main) {
 
     function getStatusText(status) { return statusTextMap[status] || status; }
     function getStatusColor(status) { return statusColorMap[status] || '#607d8b'; }
+
+    async function loadMyProposals() {
+        const area = $('#my-proposals-area');
+        if (!area) return;
+        try {
+            const proposals = await API.getUserProposals();
+            if (!proposals.length) {
+                area.innerHTML = '<p style="color:#888;">暂无录题记录</p>';
+                return;
+            }
+            const recent = proposals.slice(0, 5);
+            let html = '<table class="data-table"><thead><tr><th>标题</th><th>状态</th><th>说明</th></tr></thead><tbody>';
+            recent.forEach(p => {
+                const badge = p.status === 'pending' ? '<span class="badge badge-gold">待审核</span>'
+                    : p.status === 'approved' ? '<span class="badge badge-green">已通过</span>'
+                    : '<span class="badge badge-red">未通过</span>';
+                html += `<tr><td>${escapeHtml(p.title)}</td><td>${badge}</td><td>${escapeHtml(p.admin_reason || '—')}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            if (proposals.length > 5) html += '<p style="margin-top:8px;"><a href="#/proposals">查看全部 ' + proposals.length + ' 条录题 →</a></p>';
+            else html += '<p style="margin-top:8px;"><a href="#/proposals">查看详情 →</a></p>';
+            area.innerHTML = html;
+        } catch (e) {
+            area.innerHTML = '<p style="color:#f44336;">加载失败: ' + escapeHtml(e.message) + '</p>';
+        }
+    }
 
     async function loadProblemStatus() {
         try {
@@ -123,6 +152,7 @@ async function renderUserCenter(main) {
         }
     }
 
+    await loadMyProposals();
     await loadProblemStatus();
 
     let historyLoaded = false;

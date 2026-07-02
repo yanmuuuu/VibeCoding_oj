@@ -148,7 +148,7 @@ int main() {
 
     const editor = ace.edit('code-editor');
     const themeKey = 'miooj_editor_theme';
-    const savedTheme = localStorage.getItem(themeKey) || 'ace/theme/monokai';
+    const savedTheme = localStorage.getItem(themeKey) || 'ace/theme/chrome';
     editor.setTheme(savedTheme);
     editor.session.setMode('ace/mode/c_cpp');
     editor.setOptions({

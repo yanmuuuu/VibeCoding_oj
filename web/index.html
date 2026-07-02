@@ -40,7 +40,7 @@
         ace.config.set('basePath', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/');
     </script>
 </head>
-<body>
+<body class="lc-white">
     <div id="bg-layer"></div>
     <div id="bg-overlay"></div>
 
@@ -63,6 +63,7 @@
                 <a href="#/leaderboard" id="nav-leaderboard">排行榜</a>
                 <a href="#/announcements" id="nav-announcements">公告</a>
                 <a href="#/discussions" id="nav-discussions">讨论</a>
+                <a href="#/proposals/submit" id="nav-proposals-submit" style="display:none;">录题</a>
                 <a href="#/user" id="nav-user">我的</a>
                 <a href="#/admin" id="nav-admin" style="display:none;">管理</a>
                 <a href="#/login" id="nav-login" style="display:none;">登录</a>
@@ -98,7 +99,7 @@
             <h4>设置</h4>
             <div class="setting-row">
                 <label>相册背景</label>
-                <label class="toggle-switch on" id="toggle-effects"></label>
+                <label class="toggle-switch" id="toggle-effects"></label>
             </div>
             <div class="setting-row" id="setting-use-custom-bg" style="display:none;">
                 <label>使用我的壁纸</label>
@@ -160,6 +161,9 @@
     <script src="/js/pages/leaderboard.js"></script>
     <script src="/js/pages/userProfile.js"></script>
     <script src="/js/pages/messages.js"></script>
+    <script src="/js/pages/proposalSubmit.js"></script>
+    <script src="/js/pages/proposalList.js"></script>
+    <script src="/js/pages/adminProposalReview.js"></script>
     <script src="/js/effects.js"></script>
 </body>
 </html>

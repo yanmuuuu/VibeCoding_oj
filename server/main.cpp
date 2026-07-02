@@ -41,6 +41,7 @@ void register_discussion_routes(httplib::Server& svr);
 void register_comment_routes(httplib::Server& svr);
 void register_leaderboard_routes(httplib::Server& svr);
 void register_message_routes(httplib::Server& svr);
+void register_proposal_routes(httplib::Server& svr);
 
 static std::string render_template(const std::string& path) {
     ctemplate::Template* tpl = ctemplate::Template::GetTemplate(path, ctemplate::DO_NOT_STRIP);
@@ -146,6 +147,7 @@ int main() {
     register_comment_routes(svr);
     register_leaderboard_routes(svr);
     register_message_routes(svr);
+    register_proposal_routes(svr);
 
     serve_spa(svr);
 
