@@ -117,13 +117,27 @@ u.id = std::stoi(row[0]);  // 若 row[0] 为 NULL，UB
 
 ---
 
+### 10. 判题可靠性加固 — `server/judge/*`
+**严重程度：MEDIUM**
+
+此前编译阶段和部分临时文件写入路径仍有稳定性/安全边界不足：
+- 编译子进程未设置资源限制，复杂模板或恶意代码可能拖垮编译阶段；
+- 使用 `execlp("g++")` 依赖 PATH；
+- `write()` 未处理部分写入，大源码或大输入存在截断风险；
+- judge worker 任务异常时可能让提交停留在 PENDING/COMPILING/RUNNING。
+
+**修复：**
+- `compiler.cpp` 对 g++ 子进程设置 CPU、内存、core、输出文件大小限制；
+- g++ 改为 `/usr/bin/g++` 绝对路径；
+- `compiler.cpp` / `runner.cpp` 增加 `write_all()`，处理 `EINTR` 和部分写入；
+- `engine.cpp` 对判题任务增加异常兜底，异常提交标记为 `SE` 并记录日志；
+- 前端支持「跑完全部测试点」，默认仍快速失败以节省资源。
+
+---
+
 ## 其他已知但未修复的问题（低优先级/需更大改动）
 
 | 问题 | 位置 | 说明 |
 |------|------|------|
-| 编译子进程无资源限制 | `compiler.cpp` | fork 后的 g++ 子进程没有 `setrlimit`，恶意代码可能通过 `#pragma` 耗尽资源 |
-| `execlp` 搜索 PATH | `compiler.cpp:45` | 应使用 `/usr/bin/g++` 绝对路径，避免 PATH 劫持 |
-| 判题无超时看门狗 | `engine.cpp` | 若 judge worker 崩溃，提交永远卡在 RUNNING 状态 |
-| `write()` 未处理部分写入 | `runner.cpp:35`, `compiler.cpp:21` | 大输入数据时 write 可能只写入部分字节 |
 | `extract_json_bool` 默认值 | `admin.cpp:108` | 找不到 key 时默认返回 `true`，可能导致 `is_visible` 意外变为 true |
 | `extract_json_int` 错误值混淆 | `json_extract.hpp` | 错误和有效值 -1 无法区分 |

@@ -8,7 +8,7 @@
 
 ### Q1：用 1 分钟介绍这个项目。
 
-**答：** MioOJ 是我做的 C++ 在线判题系统，类似 LeetCode 的 ACM 模式。用户注册登录后可以浏览题目、在 ACE 编辑器里写 C++、提交后自动判题，返回 AC/WA/TLE 等结果。除了 OJ 核心，还有排行榜、讨论区、私信、公告、**用户录题（管理员审核）**和管理员录题后台。后端是 C++ 单进程（cpp-httplib）+ MySQL，前端是原生 JS SPA，部署在阿里云，域名 **https://rinr.top**，Nginx + HTTPS + systemd。项目从 SPEC 驱动开发，我和 Cursor AI 结对完成实现与上线。
+**答：** MioOJ 是我做的 C++ 在线判题系统，类似 LeetCode 的 ACM 模式。用户注册登录后可以浏览题目、在 ACE 编辑器里写 C++、提交后自动判题，返回 AC/WA/TLE 等结果。除了 OJ 核心，还有通过率统计、题单训练、个人进度/热力图/错题本、排行榜、讨论区、私信、公告、**用户录题（管理员审核）**和管理员录题后台。后端是 C++ 单进程（cpp-httplib）+ MySQL，前端是原生 JS SPA，部署在阿里云，域名 **https://rinr.top**，Nginx + HTTPS + systemd。项目从 SPEC 驱动开发，我和 Cursor AI 结对完成实现与上线。
 
 ---
 
@@ -43,12 +43,13 @@
 **答：**
 1. `POST /api/submit` 写入 `submissions`，状态 PENDING  
 2. 线程池 worker 取出任务  
-3. `compiler.cpp`：代码写临时文件，`g++ -O2 -std=c++17` 编译，超时 10s  
+3. `compiler.cpp`：代码写临时文件，`/usr/bin/g++ -O2 -std=c++17` 编译，超时 10s，并对编译子进程设置 CPU/内存/文件大小限制  
 4. CE 则直接返回编译错误  
 5. 从 DB 读该题全部 `test_cases`，按 `order_index` 排序  
 6. 每个点：`runner.cpp` fork → 子进程 setrlimit(CPU/内存) → dup2 重定向 stdin/stdout → exec 用户程序 → wait4  
 7. 比对输出，记录每点状态/耗时/内存，写入 `detail_json`  
-8. 汇总为 AC/WA/TLE/MLE/RE 等  
+8. 默认首个非 AC 后快速失败；用户勾选「跑完全部测试点」时继续运行剩余测试点，给出完整状态网格  
+9. 汇总为 AC/WA/TLE/MLE/RE 等；worker 异常时兜底写 SE，避免提交永久卡住  
 
 ---
 
@@ -57,6 +58,8 @@
 **答：** 学习级方案，非生产级沙箱：
 - 每测试点 **fork 独立子进程**，崩溃不影响主服务  
 - **setrlimit** 限制 CPU 时间、内存（RLIMIT_CPU、RLIMIT_AS）  
+- 编译阶段也加 CPU/内存/文件大小限制，且用 `/usr/bin/g++` 绝对路径避免 PATH 劫持  
+- 写源码/测试输入时处理部分写入，判题 worker 异常会标记 SE  
 - 超时/wait 杀进程 → TLE  
 - 非 0 退出/信号 → RE  
 
@@ -142,12 +145,23 @@
 
 ---
 
+### Q19.1：通过率、进度和题单是怎么实现的？
+
+**答：** 没有新增表，先用现有 `questions` + `submissions` 动态聚合：
+- 题目列表/详情：`COUNT(submissions)`、`SUM(status='AC')`、`COUNT(DISTINCT AC user_id)` 算提交数、AC 数、通过人数和通过率；
+- 用户进度：按 `questions.difficulty` 分组，用 `EXISTS(AC submission)` 算每个难度已完成数；
+- 热力图：按 `DATE(submissions.created_at)` 聚合最近一年提交次数；
+- 错题本：找用户有提交但没有 AC 的题；
+- 题单：当前是内置题单（全部/简单/中等/困难），基于难度过滤动态生成，后续可扩展成自定义题单表。
+
+---
+
 ## 六、难点与改进
 
 ### Q20：开发中遇到的最大难点？
 
 **答（示例，可结合真实经历）：**
-1. **判题稳定性**：fork/wait、临时文件清理、编译超时  
+1. **判题稳定性**：fork/wait、临时文件清理、编译超时、编译资源限制、worker 异常兜底  
 2. **录题流程**：标程生成期望输出、发布前校验用例+标程；**用户录题**走审核流（用户填基本信息 → 管理员补标程/用例 → 通过/不通过+理由）  
 3. **部署**：环境变量、systemd 与手动进程端口冲突 → update 脚本先 stop  
 4. **体验**：localStorage 草稿未按用户隔离 → 改为 userId 维度  
@@ -162,7 +176,7 @@
 
 ### Q22：有什么已知不足？
 
-**答：** 仅 C++；沙箱不够硬；localStorage 草稿不跨设备；同服务器 local/prod 共库；无自动化测试 CI。都在 SPEC V2 或后续计划里。
+**答：** 仅 C++；沙箱仍是学习级 setrlimit，不是 Docker/seccomp；localStorage 草稿不跨设备；内置题单还不是用户自定义题单；同服务器 local/prod 共库；无自动化测试 CI。都在 SPEC V2 或后续计划里。
 
 ---
 
