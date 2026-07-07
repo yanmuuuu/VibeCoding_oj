@@ -12,6 +12,10 @@ async function renderUserCenter(main) {
             </div>
             <input type="file" id="user-avatar-upload-input" accept="image/*" style="display:none;">
         </div>
+        <h3>我的进度</h3>
+        <div id="progress-area"><p>加载中...</p></div>
+        <h3 style="margin-top:24px;">错题本</h3>
+        <div id="wrongbook-area"><p>加载中...</p></div>
         <h3>我的录题</h3>
         <p class="admin-hint" style="margin-bottom:12px;">查看录题审核状态，或 <a href="#/proposals/submit">提交新题目</a></p>
         <div id="my-proposals-area"><p>加载中...</p></div>
@@ -45,6 +49,53 @@ async function renderUserCenter(main) {
 
     function getStatusText(status) { return statusTextMap[status] || status; }
     function getStatusColor(status) { return statusColorMap[status] || '#607d8b'; }
+
+    async function loadProgress() {
+        const progressArea = $('#progress-area');
+        const wrongbookArea = $('#wrongbook-area');
+        try {
+            const progress = await API.getUserProgress();
+            const diffHtml = (progress.difficulty || []).map(d => {
+                const total = parseInt(d.total_count, 10) || 0;
+                const solved = parseInt(d.solved_count, 10) || 0;
+                const pct = total > 0 ? Math.round(solved * 100 / total) : 0;
+                return `<div class="progress-card">
+                    <div class="progress-card-title">${difficultyBadge(d.difficulty)}</div>
+                    <div class="progress-card-num">${solved}/${total}</div>
+                    <div class="progress-bar"><span style="width:${pct}%"></span></div>
+                </div>`;
+            }).join('');
+            const heatmap = progress.heatmap || [];
+            const heatHtml = heatmap.length ? heatmap.map(h => {
+                const count = parseInt(h.count, 10) || 0;
+                const level = count >= 8 ? 4 : count >= 4 ? 3 : count >= 2 ? 2 : count >= 1 ? 1 : 0;
+                return `<span class="heat-cell heat-${level}" title="${escapeHtml(h.date)}: ${count} 次提交"></span>`;
+            }).join('') : '<span class="empty-hint">暂无提交热力图数据</span>';
+            progressArea.innerHTML = `
+                <div class="progress-grid">${diffHtml || '<p class="empty-hint">暂无可见题目</p>'}</div>
+                <div class="heatmap-wrap"><div class="heatmap-title">最近一年提交热力图</div><div class="heatmap-grid">${heatHtml}</div></div>`;
+
+            const wrongbook = progress.wrongbook || [];
+            if (!wrongbook.length) {
+                wrongbookArea.innerHTML = '<p style="color:#888;">暂无错题，继续保持～</p>';
+            } else {
+                wrongbookArea.innerHTML = '<table class="data-table"><thead><tr><th>#</th><th>题目</th><th>难度</th><th>最近状态</th><th>提交次数</th></tr></thead><tbody>' +
+                    wrongbook.map(w => `<tr class="clickable" data-href="#/problems/${w.id}">
+                        <td>${w.display_index != null ? w.display_index : w.id}</td>
+                        <td>${escapeHtml(w.title)}</td>
+                        <td>${difficultyBadge(w.difficulty)}</td>
+                        <td><span style="color:${getStatusColor(w.last_status)};font-weight:bold;">${escapeHtml(w.last_status)}</span> ${getStatusText(w.last_status)}</td>
+                        <td>${w.attempt_count}</td>
+                    </tr>`).join('') + '</tbody></table>';
+                wrongbookArea.querySelectorAll('tr.clickable').forEach(row => {
+                    row.addEventListener('click', () => App.navigate(row.dataset.href));
+                });
+            }
+        } catch (e) {
+            progressArea.innerHTML = '<p style="color:#f44336;">加载失败: ' + escapeHtml(e.message) + '</p>';
+            wrongbookArea.innerHTML = '<p style="color:#f44336;">加载失败: ' + escapeHtml(e.message) + '</p>';
+        }
+    }
 
     async function loadMyProposals() {
         const area = $('#my-proposals-area');
@@ -152,6 +203,7 @@ async function renderUserCenter(main) {
         }
     }
 
+    await loadProgress();
     await loadMyProposals();
     await loadProblemStatus();
 

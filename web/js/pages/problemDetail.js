@@ -44,6 +44,9 @@ async function renderProblemDetail(main) {
                     <div class="section">
                         <span class="limit-badge">${p.time_limit}s</span>
                         <span class="limit-badge">${p.memory_limit}MB</span>
+                        <span class="limit-badge">通过率 ${p.acceptance_rate || 0}%</span>
+                        <span class="limit-badge">提交 ${p.submit_count || 0}</span>
+                        <span class="limit-badge">通过人数 ${p.accepted_users || 0}</span>
                     </div>
                     </div>
                     <div id="problem-comments-tab" class="problem-tab-content" data-comments-tab style="display:none;"></div>
@@ -70,6 +73,10 @@ int main() {
                             <button id="submit-btn" class="btn-primary">提交代码</button>
                             <button id="load-ac-btn" class="btn-ac-load">加载已通过代码</button>
                             <button id="undo-ac-btn" class="btn-undo" style="display:none;" title="撤销到加载前的代码">↩ 撤销</button>
+                            <label class="autocomplete-toggle" title="非 AC 后继续运行剩余测试点，只展示状态不泄露数据">
+                                <input type="checkbox" id="run-all-check">
+                                <span>跑完全部测试点</span>
+                            </label>
                             <label class="autocomplete-toggle" title="切换代码自动补全">
                                 <input type="checkbox" id="autocomplete-check" checked>
                                 <span>自动补全</span>
@@ -237,7 +244,8 @@ int main() {
             submitBtn.classList.add('btn-loading');
             submitBtn.textContent = '提交中...';
             localStorage.setItem(storageKey, code);
-            const result = await API.submit(parseInt(id), code);
+            const runAll = $('#run-all-check') && $('#run-all-check').checked;
+            const result = await API.submit(parseInt(id), code, runAll);
             showToast('提交成功，正在跳转结果页…', 'success', 1800);
             App.navigate('#/result/' + result.submission_id);
         } catch(e) {
