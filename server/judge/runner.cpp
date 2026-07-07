@@ -13,6 +13,20 @@
 
 extern Config g_config;
 
+static bool write_all(int fd, const char* data, size_t size) {
+    size_t written = 0;
+    while (written < size) {
+        ssize_t n = write(fd, data + written, size - written);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            return false;
+        }
+        if (n == 0) return false;
+        written += static_cast<size_t>(n);
+    }
+    return true;
+}
+
 RunResult run_single(const std::string& binary_path, const TestCase& tc,
                      int time_limit_sec, int memory_limit_mb) {
     RunResult result;
@@ -32,7 +46,11 @@ RunResult run_single(const std::string& binary_path, const TestCase& tc,
         return result;
     }
 
-    write(input_file.fd(), tc.input_data.c_str(), tc.input_data.size());
+    if (!write_all(input_file.fd(), tc.input_data.c_str(), tc.input_data.size())) {
+        result.status = "SE";
+        LOG_ERROR("Runner: failed to write input file for test case #" + std::to_string(tc.order_index));
+        return result;
+    }
     input_file.close();
     output_file.close();
     err_file.close();

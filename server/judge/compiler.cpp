@@ -4,10 +4,26 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <sys/resource.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <cstring>
 #include <iostream>
+#include <cerrno>
+
+static bool write_all(int fd, const char* data, size_t size) {
+    size_t written = 0;
+    while (written < size) {
+        ssize_t n = write(fd, data + written, size - written);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            return false;
+        }
+        if (n == 0) return false;
+        written += static_cast<size_t>(n);
+    }
+    return true;
+}
 
 CompileResult compile_code(const std::string& code, const std::string& tmp_dir, int timeout_sec) {
     CompileResult result;
@@ -18,7 +34,7 @@ CompileResult compile_code(const std::string& code, const std::string& tmp_dir, 
         return result;
     }
     // Write code to temp file
-    if (write(src.fd(), code.c_str(), code.size()) < 0) {
+    if (!write_all(src.fd(), code.c_str(), code.size())) {
         result.error = "Failed to write source code";
         LOG_ERROR("Compile: failed to write source code to temp file");
         return result;
@@ -43,10 +59,27 @@ CompileResult compile_code(const std::string& code, const std::string& tmp_dir, 
     pid_t pid = fork();
     if (pid == 0) {
         // Child: run g++
+        struct rlimit rl;
+        rl.rlim_cur = timeout_sec > 0 ? timeout_sec : 10;
+        rl.rlim_max = rl.rlim_cur + 1;
+        setrlimit(RLIMIT_CPU, &rl);
+
+        rl.rlim_cur = 1024LL * 1024 * 1024;
+        rl.rlim_max = 1024LL * 1024 * 1024;
+        setrlimit(RLIMIT_AS, &rl);
+
+        rl.rlim_cur = 0;
+        rl.rlim_max = 0;
+        setrlimit(RLIMIT_CORE, &rl);
+
+        rl.rlim_cur = 64 * 1024 * 1024;
+        rl.rlim_max = 64 * 1024 * 1024;
+        setrlimit(RLIMIT_FSIZE, &rl);
+
         dup2(err_file.fd(), STDERR_FILENO);
         close(err_file.fd());
-        execlp("g++", "g++", "-O2", "-std=c++17", "-o", bin_path.c_str(),
-               src.path().c_str(), nullptr);
+        execl("/usr/bin/g++", "g++", "-O2", "-std=c++17", "-o", bin_path.c_str(),
+              src.path().c_str(), nullptr);
         _exit(1);
     } else if (pid > 0) {
         err_file.close();

@@ -15,15 +15,33 @@ JudgeEngine::~JudgeEngine() {}
 
     // Submit to judge engine
     void JudgeEngine::submit(int submission_id, const std::string& code, int question_id,
-                             int time_limit, int memory_limit) {
+                             int time_limit, int memory_limit, bool run_all_tests) {
         LOG_INFO("Judge enqueued: submission #" + std::to_string(submission_id) + " question #" + std::to_string(question_id));
-        pool_.enqueue([this, submission_id, code, question_id, time_limit, memory_limit] {
-            process(submission_id, code, question_id, time_limit, memory_limit);
+        pool_.enqueue([this, submission_id, code, question_id, time_limit, memory_limit, run_all_tests] {
+            try {
+                process(submission_id, code, question_id, time_limit, memory_limit, run_all_tests);
+            } catch (const std::exception& e) {
+                mark_system_error(submission_id, e.what());
+            } catch (...) {
+                mark_system_error(submission_id, "unknown judge exception");
+            }
         });
     }
 
+void JudgeEngine::mark_system_error(int submission_id, const std::string& message) {
+    try {
+        auto db = g_db->acquire();
+        db->query("UPDATE submissions SET status='SE', compile_error='" + db->escape(message) +
+                  "' WHERE id=" + std::to_string(submission_id) +
+                  " AND status IN ('PENDING','COMPILING','RUNNING')");
+    } catch (...) {
+        // The worker must stay alive even if the database is temporarily unavailable.
+    }
+    LOG_ERROR("Submission #" + std::to_string(submission_id) + " marked SE by judge watchdog: " + message);
+}
+
 void JudgeEngine::process(int submission_id, const std::string& code, int question_id,
-                          int time_limit, int memory_limit) {
+                          int time_limit, int memory_limit, bool run_all_tests) {
     auto db = g_db->acquire();
 
     // Update status to COMPILING
@@ -101,7 +119,7 @@ void JudgeEngine::process(int submission_id, const std::string& code, int questi
         if (rr.time_ms > max_time) max_time = rr.time_ms;
         if (rr.memory_kb > max_mem) max_mem = rr.memory_kb;
 
-        if (rr.status != "AC") break; // Stop on first failure
+        if (rr.status != "AC" && !run_all_tests) break; // Fast-fail unless user requests full feedback.
     }
 
     // Clean up binary

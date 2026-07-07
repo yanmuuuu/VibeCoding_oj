@@ -22,6 +22,7 @@ void register_submission_routes(httplib::Server& svr) {
         auto body = req.body;
         int question_id = extract_json_int(body, "question_id");
         std::string code = extract_json_string(body, "code");
+        bool run_all_tests = extract_json_bool(body, "run_all");
 
         if (question_id <= 0 || code.empty()) {
             res.status = 400;
@@ -63,9 +64,9 @@ void register_submission_routes(httplib::Server& svr) {
         int sub_id = db->last_insert_id();
 
         // Submit to judge engine
-        g_judge->submit(sub_id, code, question_id, time_limit, memory_limit);
+        g_judge->submit(sub_id, code, question_id, time_limit, memory_limit, run_all_tests);
 
-        LOG_INFO("Submission #" + std::to_string(sub_id) + " by user " + user.username + " (id=" + std::to_string(user.id) + ") for question " + std::to_string(question_id));
+        LOG_INFO("Submission #" + std::to_string(sub_id) + " by user " + user.username + " (id=" + std::to_string(user.id) + ") for question " + std::to_string(question_id) + (run_all_tests ? " [run_all]" : ""));
 
         res.set_content("{\"ok\":true,\"submission_id\":" + std::to_string(sub_id) + "}", "application/json");
     });

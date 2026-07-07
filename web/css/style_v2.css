@@ -1606,3 +1606,64 @@ body.lc-white .msg-chat-input textarea { background:#fafafa; border-color:#d9d9d
 body.lc-white .msg-chat-input textarea::placeholder { color:#bfbfbf; }
 body.lc-white .msg-chat-input textarea:focus { border-color:#1890ff; }
 body.lc-white .msg-chat-input button { background:#1890ff; color:#fff; }
+
+/* Progress, heatmap and training sets */
+.progress-grid, .set-grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
+    gap:14px;
+    margin:12px 0 18px;
+}
+.progress-card, .set-card {
+    padding:16px;
+    border-radius:12px;
+    background:rgba(255,255,255,0.08);
+    border:1px solid rgba(255,255,255,0.14);
+    box-shadow:0 8px 24px rgba(0,0,0,0.12);
+}
+.set-card { cursor:pointer; transition:transform 0.18s, border-color 0.18s; }
+.set-card:hover { transform:translateY(-2px); border-color:var(--gold-mid); }
+.progress-card-title, .set-card-title { font-weight:700; margin-bottom:8px; color:var(--gold-light); }
+.progress-card-num { font-size:1.5em; font-weight:700; margin:8px 0; }
+.set-card-desc { color:#c4c8d4; font-size:0.92em; min-height:42px; margin-bottom:12px; }
+.set-card-meta { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; font-size:0.9em; }
+.progress-bar {
+    height:8px;
+    border-radius:99px;
+    background:rgba(255,255,255,0.12);
+    overflow:hidden;
+}
+.progress-bar span {
+    display:block;
+    height:100%;
+    border-radius:99px;
+    background:linear-gradient(90deg, #67e8f9, #f9a8d4);
+}
+.heatmap-wrap { margin:12px 0 18px; }
+.heatmap-title { font-weight:600; margin-bottom:8px; }
+.heatmap-grid { display:flex; flex-wrap:wrap; gap:4px; max-width:760px; }
+.heat-cell {
+    width:10px;
+    height:10px;
+    border-radius:2px;
+    background:rgba(255,255,255,0.12);
+}
+.heat-1 { background:#b7eb8f; }
+.heat-2 { background:#73d13d; }
+.heat-3 { background:#389e0d; }
+.heat-4 { background:#135200; }
+
+body.lc-white .progress-card, body.lc-white .set-card {
+    background:#fff;
+    border-color:#f0f0f0;
+    box-shadow:0 4px 16px rgba(0,0,0,0.04);
+}
+body.lc-white .set-card:hover { border-color:#1890ff; }
+body.lc-white .progress-card-title, body.lc-white .set-card-title { color:#262626; }
+body.lc-white .set-card-desc { color:#8c8c8c; }
+body.lc-white .progress-bar { background:#f0f0f0; }
+body.lc-white .heat-cell { background:#ebedf0; }
+body.lc-white .heat-1 { background:#9be9a8; }
+body.lc-white .heat-2 { background:#40c463; }
+body.lc-white .heat-3 { background:#30a14e; }
+body.lc-white .heat-4 { background:#216e39; }

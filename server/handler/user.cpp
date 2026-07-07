@@ -185,4 +185,75 @@ void register_user_routes(httplib::Server& svr) {
         if (result) mysql_free_result(result);
         res.set_content(json.str(), "application/json");
     });
+
+    svr.Get("/api/user/progress", [](const httplib::Request& req, httplib::Response& res) {
+        AuthUser user = authenticate(req);
+        if (!user.valid) {
+            res.status = 401;
+            res.set_content("{\"error\":\"未登录\"}", "application/json");
+            return;
+        }
+
+        auto db = g_db->acquire();
+        std::ostringstream json;
+        json << "{\"difficulty\":[";
+
+        db->query("SELECT q.difficulty, COUNT(q.id) AS total_count, "
+                  "SUM(CASE WHEN EXISTS(SELECT 1 FROM submissions s WHERE s.question_id=q.id AND s.user_id=" + std::to_string(user.id) + " AND s.status='AC') THEN 1 ELSE 0 END) AS solved_count "
+                  "FROM questions q WHERE q.is_visible=1 GROUP BY q.difficulty "
+                  "ORDER BY FIELD(q.difficulty,'简单','中等','困难')");
+        MYSQL_RES* result = db->store_result();
+        bool first = true;
+        MYSQL_ROW row;
+        while (result && (row = mysql_fetch_row(result))) {
+            if (!first) json << ",";
+            first = false;
+            json << "{\"difficulty\":\"" << (row[0] ? row[0] : "简单") << "\""
+                 << ",\"total_count\":" << (row[1] ? row[1] : "0")
+                 << ",\"solved_count\":" << (row[2] ? row[2] : "0") << "}";
+        }
+        if (result) mysql_free_result(result);
+
+        json << "],\"heatmap\":[";
+        db->query("SELECT DATE(created_at) AS d, COUNT(*) "
+                  "FROM submissions WHERE user_id=" + std::to_string(user.id) +
+                  " AND created_at >= DATE_SUB(CURDATE(), INTERVAL 364 DAY) "
+                  "GROUP BY DATE(created_at) ORDER BY d ASC");
+        result = db->store_result();
+        first = true;
+        while (result && (row = mysql_fetch_row(result))) {
+            if (!first) json << ",";
+            first = false;
+            json << "{\"date\":\"" << (row[0] ? row[0] : "") << "\""
+                 << ",\"count\":" << (row[1] ? row[1] : "0") << "}";
+        }
+        if (result) mysql_free_result(result);
+
+        json << "],\"wrongbook\":[";
+        db->query("SELECT q.id, q.display_index, q.title, q.difficulty, COUNT(s.id) AS attempt_count, "
+                  "(SELECT s2.status FROM submissions s2 WHERE s2.user_id=" + std::to_string(user.id) + " AND s2.question_id=q.id ORDER BY s2.id DESC LIMIT 1) AS last_status, "
+                  "MAX(s.created_at) AS last_submit_at "
+                  "FROM questions q JOIN submissions s ON s.question_id=q.id AND s.user_id=" + std::to_string(user.id) + " "
+                  "WHERE q.is_visible=1 "
+                  "GROUP BY q.id "
+                  "HAVING SUM(CASE WHEN s.status='AC' THEN 1 ELSE 0 END)=0 "
+                  "ORDER BY last_submit_at DESC LIMIT 30");
+        result = db->store_result();
+        first = true;
+        while (result && (row = mysql_fetch_row(result))) {
+            if (!first) json << ",";
+            first = false;
+            json << "{\"id\":" << (row[0] ? row[0] : "0")
+                 << ",\"display_index\":" << (row[1] ? row[1] : "0")
+                 << ",\"title\":\"" << json_escape(row[2] ? row[2] : "") << "\""
+                 << ",\"difficulty\":\"" << (row[3] ? row[3] : "简单") << "\""
+                 << ",\"attempt_count\":" << (row[4] ? row[4] : "0")
+                 << ",\"last_status\":\"" << (row[5] ? row[5] : "") << "\""
+                 << ",\"last_submit_at\":\"" << (row[6] ? row[6] : "") << "\"}";
+        }
+        if (result) mysql_free_result(result);
+
+        json << "]}";
+        res.set_content(json.str(), "application/json");
+    });
 }

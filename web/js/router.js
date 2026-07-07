@@ -43,6 +43,7 @@ const App = {
         const navbar = $('#navbar');
         const navLinks = $('#nav-links');
         const navProblems = $('#nav-problems');
+        const navSets = $('#nav-sets');
         const navAnnounce = $('#nav-announcements');
         const navDiscussions = $('#nav-discussions');
         const navLeaderboard = $('#nav-leaderboard');
@@ -59,6 +60,7 @@ const App = {
 
         if (this.user) {
             if (navProblems) navProblems.style.display = '';
+            if (navSets) navSets.style.display = '';
             if (navLeaderboard) navLeaderboard.style.display = '';
             if (navDiscussions) navDiscussions.style.display = '';
             if (navMessages) navMessages.style.display = '';
@@ -70,6 +72,7 @@ const App = {
             if (typeof updateMessageBadge === 'function') updateMessageBadge();
         } else {
             if (navProblems) navProblems.style.display = 'none';
+            if (navSets) navSets.style.display = 'none';
             if (navLeaderboard) navLeaderboard.style.display = 'none';
             if (navDiscussions) navDiscussions.style.display = 'none';
             if (navMessages) navMessages.style.display = 'none';
@@ -83,6 +86,7 @@ const App = {
     highlightNav(hash) {
         var activeId = null;
         if (hash === '/problems' || hash.indexOf('/problems/') === 0) activeId = 'nav-problems';
+        else if (hash === '/sets' || hash.indexOf('/sets/') === 0) activeId = 'nav-sets';
         else if (hash === '/announcements') activeId = 'nav-announcements';
         else if (hash === '/discussions' || hash.indexOf('/discussions/') === 0) activeId = 'nav-discussions';
         else if (hash === '/proposals/submit' || hash.indexOf('/proposals/edit/') === 0) activeId = 'nav-proposals-submit';
@@ -91,7 +95,7 @@ const App = {
         else if (hash === '/messages') activeId = 'nav-messages';
         else if (hash.indexOf('/admin') === 0) activeId = 'nav-admin';
         else if (hash === '/login' || hash === '/register') activeId = 'nav-login';
-        ['nav-problems', 'nav-announcements', 'nav-discussions', 'nav-user', 'nav-admin', 'nav-login', 'nav-leaderboard', 'nav-messages', 'nav-proposals-submit'].forEach(function(id) {
+        ['nav-problems', 'nav-sets', 'nav-announcements', 'nav-discussions', 'nav-user', 'nav-admin', 'nav-login', 'nav-leaderboard', 'nav-messages', 'nav-proposals-submit'].forEach(function(id) {
             var el = document.getElementById(id);
             if (el) el.classList.toggle('nav-active', id === activeId);
         });
@@ -130,6 +134,7 @@ const App = {
             '/login': 'login',
             '/register': 'register',
             '/problems': 'problems',
+            '/sets': 'problemSets',
             '/user': 'userCenter',
             '/admin': 'admin',
             '/admin/stats': 'admin',
@@ -153,6 +158,9 @@ const App = {
                 page = 'problemDetail';
                 const id = path.split('/')[2];
                 main.dataset.problemId = id;
+            } else if (path.startsWith('/sets/')) {
+                page = 'problemSetDetail';
+                main.dataset.setId = path.split('/')[2];
             } else if (path.startsWith('/result/')) {
                 page = 'result';
                 const id = path.split('/')[2];
@@ -201,6 +209,8 @@ const App = {
                 case 'login': await renderLogin(main); break;
                 case 'register': await renderRegister(main); break;
                 case 'problems': await renderProblems(main); break;
+                case 'problemSets': await renderProblemSets(main); break;
+                case 'problemSetDetail': await renderProblemSetDetail(main); break;
                 case 'problemDetail': await renderProblemDetail(main); break;
                 case 'result': await renderResult(main); break;
                 case 'userCenter': await renderUserCenter(main); break;

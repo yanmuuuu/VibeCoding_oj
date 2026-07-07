@@ -30,15 +30,17 @@ async function renderProblems(main) {
     function renderTable(filtered, keyword, difficulty) {
         if (filtered.length === 0) {
             if (!keyword && !difficulty) {
-                return '<tr><td colspan="5" class="empty-hint">暂无题目，请联系管理员添加，或稍后再来看看～</td></tr>';
+                return '<tr><td colspan="7" class="empty-hint">暂无题目，请联系管理员添加，或稍后再来看看～</td></tr>';
             }
-            return '<tr><td colspan="5" class="empty-hint">没有匹配的题目，试试编号（如 1 或 #3）、标题关键词或难度吧</td></tr>';
+            return '<tr><td colspan="7" class="empty-hint">没有匹配的题目，试试编号（如 1 或 #3）、标题关键词或难度吧</td></tr>';
         }
         return filtered.map(p =>
             `<tr class="clickable" data-href="#/problems/${p.id}">
                 <td>${p.display_index != null ? p.display_index : p.id}</td>
                 <td>${escapeHtml(p.title)}</td>
                 <td>${difficultyBadge(p.difficulty)}</td>
+                <td>${p.acceptance_rate || 0}%</td>
+                <td>${p.accepted_users || 0}</td>
                 <td>${p.time_limit}s</td>
                 <td>${p.memory_limit}MB</td>
             </tr>`
@@ -59,7 +61,7 @@ async function renderProblems(main) {
             </div>
             <p class="filter-hint">支持题目编号（如 <code>1</code>、<code>#3</code>）、标题关键词；可与难度筛选组合使用</p>
             <table class="data-table">
-                <thead><tr><th>#</th><th>标题</th><th>难度</th><th>时间限制</th><th>内存限制</th></tr></thead>
+                <thead><tr><th>#</th><th>标题</th><th>难度</th><th>通过率</th><th>通过人数</th><th>时间限制</th><th>内存限制</th></tr></thead>
                 <tbody id="problem-tbody">${renderTable(problems, '', '')}</tbody>
             </table>
         </div>`;
