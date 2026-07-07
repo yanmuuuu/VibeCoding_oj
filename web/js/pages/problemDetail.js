@@ -2,19 +2,65 @@ async function renderProblemDetail(main) {
     await App.ensureAuth();
     const id = main.dataset.problemId;
     const p = await API.getProblem(id);
-    const testCases = await API.getTestCases(id).catch(() => []);
 
-    const testCasesHtml = testCases.length > 0 ? `
-        <div class="test-cases-preview">
-            <h4>测试样例</h4>
-            ${testCases.map((tc, i) => `
-                <div class="test-case-item">
-                    <div><strong>样例 ${i+1}:</strong></div>
-                    <div>输入: <pre>${escapeHtml(tc.input_data)}</pre></div>
-                    <div>输出: <pre>${escapeHtml(tc.expected_output)}</pre></div>
-                </div>
-            `).join('')}
-        </div>` : '';
+    function splitSampleBlocks(text) {
+        const raw = (text || '').trim();
+        if (!raw) return [];
+        return raw.split(/\n\s*(?:---+|===+)\s*\n/g).map(s => s.trim()).filter(Boolean);
+    }
+
+    function buildSamples(problem) {
+        const inputs = splitSampleBlocks(problem.sample_input);
+        const outputs = splitSampleBlocks(problem.sample_output);
+        const count = Math.max(inputs.length, outputs.length);
+        const samples = [];
+        for (let i = 0; i < count; i++) {
+            samples.push({
+                index: i + 1,
+                input: inputs[i] || '',
+                output: outputs[i] || ''
+            });
+        }
+        return samples;
+    }
+
+    function renderExampleSection(samples) {
+        if (!samples.length) {
+            return `<div class="section lc-example-section">
+                <h3>示例</h3>
+                <div class="lc-example-empty">暂无公开样例，提交时仍会使用隐藏测试点判题。</div>
+            </div>`;
+        }
+        return `<div class="section lc-example-section">
+            <div class="lc-example-title-row">
+                <h3>示例</h3>
+                <span class="lc-example-hint">公开样例仅用于理解题意，隐藏测试点不会展示</span>
+            </div>
+            <div class="lc-example-tabs">
+                ${samples.map((s, i) => `<button type="button" class="lc-example-tab ${i === 0 ? 'active' : ''}" data-sample-idx="${i}">示例 ${s.index}</button>`).join('')}
+            </div>
+            <div class="lc-example-cards">
+                ${samples.map((s, i) => `<div class="lc-example-card ${i === 0 ? 'active' : ''}" data-sample-card="${i}">
+                    <div class="lc-example-io">
+                        <div class="lc-example-label">
+                            <span>输入</span>
+                            <button type="button" class="lc-copy-btn" data-copy="${i}" data-copy-kind="input">复制</button>
+                        </div>
+                        <pre class="lc-example-pre">${escapeHtml(s.input || '无')}</pre>
+                    </div>
+                    <div class="lc-example-io">
+                        <div class="lc-example-label">
+                            <span>输出</span>
+                            <button type="button" class="lc-copy-btn" data-copy="${i}" data-copy-kind="output">复制</button>
+                        </div>
+                        <pre class="lc-example-pre">${escapeHtml(s.output || '无')}</pre>
+                    </div>
+                </div>`).join('')}
+            </div>
+        </div>`;
+    }
+
+    const samples = buildSamples(p);
 
     main.innerHTML = `
         <div class="problem-detail">
@@ -36,11 +82,7 @@ async function renderProblemDetail(main) {
                     </div>
                     ${p.input_format ? `<div class="section"><h3>输入格式</h3><div>${escapeHtml(p.input_format)}</div></div>` : ''}
                     ${p.output_format ? `<div class="section"><h3>输出格式</h3><div>${escapeHtml(p.output_format)}</div></div>` : ''}
-                    <div class="section">
-                        <h3>样例</h3>
-                        ${p.sample_input ? `<div><strong>输入:</strong><pre class="sample-pre">${escapeHtml(p.sample_input)}</pre></div>` : ''}
-                        ${p.sample_output ? `<div><strong>输出:</strong><pre class="sample-pre">${escapeHtml(p.sample_output)}</pre></div>` : ''}
-                    </div>
+                    ${renderExampleSection(samples)}
                     <div class="section">
                         <span class="limit-badge">${p.time_limit}s</span>
                         <span class="limit-badge">${p.memory_limit}MB</span>
@@ -96,10 +138,53 @@ int main() {
                             </div>
                         </div>
                     </div>
-                    ${testCasesHtml}
                 </div>
             </div>
         </div>`;
+
+    function copyText(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(text);
+        }
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        return Promise.resolve();
+    }
+
+    $$('.lc-example-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            const idx = this.dataset.sampleIdx;
+            $$('.lc-example-tab').forEach(t => t.classList.toggle('active', t === this));
+            $$('.lc-example-card').forEach(card => card.classList.toggle('active', card.dataset.sampleCard === idx));
+        });
+    });
+    $$('.lc-copy-btn').forEach(btn => {
+        btn.addEventListener('click', async function(e) {
+            e.stopPropagation();
+            const sample = samples[parseInt(this.dataset.copy, 10)];
+            if (!sample) return;
+            const text = this.dataset.copyKind === 'output' ? sample.output : sample.input;
+            try {
+                await copyText(text || '');
+                const old = this.textContent;
+                this.textContent = '已复制';
+                this.classList.add('copied');
+                showToast('样例已复制', 'success');
+                setTimeout(() => {
+                    this.textContent = old;
+                    this.classList.remove('copied');
+                }, 1200);
+            } catch (_) {
+                showToast('复制失败，请手动选择文本', 'error');
+            }
+        });
+    });
 
     var commentsTabInited = false;
     $('#problem-tabs').addEventListener('click', function(e) {

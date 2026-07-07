@@ -314,6 +314,107 @@ body.lc-white .setting-row-avatar .btn-reset-bg { background: #f0f4ff !important
     font-size:0.88em; white-space:pre-wrap; color:#e0dcd0;
     border:1px solid rgba(255,255,255,0.08);
 }
+.lc-example-section {
+    overflow:hidden;
+    animation: soft-card-in 0.34s ease both;
+}
+.lc-example-title-row {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    margin-bottom:12px;
+}
+.lc-example-title-row h3 { margin-bottom:0 !important; }
+.lc-example-hint {
+    color:#8c8c8c;
+    font-size:0.78em;
+    white-space:nowrap;
+}
+.lc-example-tabs {
+    display:flex;
+    gap:8px;
+    margin-bottom:12px;
+    overflow-x:auto;
+    padding-bottom:2px;
+}
+.lc-example-tab {
+    border:1px solid rgba(255,255,255,0.10);
+    background:rgba(255,255,255,0.06);
+    color:#a0a8b4;
+    border-radius:999px;
+    padding:6px 14px;
+    cursor:pointer;
+    font-size:0.84em;
+    transition:background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+.lc-example-tab:hover {
+    transform:translateY(-1px);
+    color:var(--gold-light);
+    border-color:rgba(212,175,55,0.35);
+}
+.lc-example-tab.active {
+    color:#1a1028;
+    background:linear-gradient(135deg, var(--gold-light), var(--gold-mid));
+    border-color:transparent;
+    font-weight:700;
+}
+.lc-example-card {
+    display:none;
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,0.08);
+    background:rgba(0,0,0,0.16);
+    padding:14px;
+    animation: example-card-in 0.22s ease both;
+}
+.lc-example-card.active { display:block; }
+.lc-example-io + .lc-example-io { margin-top:12px; }
+.lc-example-label {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:6px;
+    color:#fcd9b8 !important;
+    font-weight:700;
+    font-size:0.88em;
+}
+.lc-copy-btn {
+    border:none;
+    border-radius:6px;
+    padding:4px 10px;
+    background:rgba(255,255,255,0.08);
+    color:#a0a8b4;
+    cursor:pointer;
+    font-size:0.78em;
+    transition:background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+.lc-copy-btn:hover {
+    transform:translateY(-1px);
+    background:rgba(212,175,55,0.16);
+    color:var(--gold-light);
+}
+.lc-copy-btn.copied {
+    background:rgba(82,196,26,0.18);
+    color:#95de64;
+}
+.lc-example-pre {
+    margin-top:0 !important;
+    background:rgba(0,0,0,0.28) !important;
+    border:1px solid rgba(212,175,55,0.16) !important;
+    border-left:3px solid var(--gold-mid) !important;
+    line-height:1.65;
+}
+.lc-example-empty {
+    color:#a0a8b4 !important;
+    background:rgba(255,255,255,0.05);
+    border:1px dashed rgba(255,255,255,0.14);
+    border-radius:10px;
+    padding:14px 16px;
+}
+@keyframes example-card-in {
+    from { opacity:0; transform:translateY(6px); }
+    to { opacity:1; transform:translateY(0); }
+}
 .limit-badge {
     display:inline-block; background:rgba(255,255,255,0.08);
     color:#c4c8d4; padding:5px 14px; border-radius:6px; margin-right:8px;
@@ -740,6 +841,52 @@ body.lc-white .problem-left .section h3 { color: #595959; }
 body.lc-white .problem-left .section div { color: #262626; }
 body.lc-white .problem-left .section pre {
     background: #fafafa; color: #262626; border: 1px solid #f0f0f0;
+}
+body.lc-white .lc-example-hint { color:#8c8c8c; }
+body.lc-white .lc-example-tab {
+    background:#f5f5f5;
+    color:#595959;
+    border-color:#e8e8e8;
+}
+body.lc-white .lc-example-tab:hover {
+    color:#1890ff;
+    border-color:#91d5ff;
+}
+body.lc-white .lc-example-tab.active {
+    color:#fff;
+    background:#1890ff;
+}
+body.lc-white .lc-example-card {
+    background:#fafafa;
+    border-color:#f0f0f0;
+}
+body.lc-white .lc-example-label {
+    color:#262626 !important;
+}
+body.lc-white .lc-copy-btn {
+    background:#fff;
+    color:#8c8c8c;
+    border:1px solid #e8e8e8;
+}
+body.lc-white .lc-copy-btn:hover {
+    background:#e6f7ff;
+    color:#1890ff;
+}
+body.lc-white .lc-copy-btn.copied {
+    background:#f6ffed;
+    color:#52c41a;
+    border-color:#b7eb8f;
+}
+body.lc-white .lc-example-pre {
+    background:#fff !important;
+    color:#262626 !important;
+    border-color:#e8e8e8 !important;
+    border-left-color:#1890ff !important;
+}
+body.lc-white .lc-example-empty {
+    color:#8c8c8c !important;
+    background:#fafafa;
+    border-color:#e8e8e8;
 }
 body.lc-white .limit-badge { background: #fafafa; color: #595959; border-color: #f0f0f0; }
 body.lc-white .editor-wrapper {

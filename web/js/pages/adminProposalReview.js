@@ -52,8 +52,10 @@ async function renderAdminProposalReview(main) {
                 </div>
                 <div class="form-group"><label>输入格式</label><textarea id="p-ifmt" rows="2">${escapeHtml(p.input_format || '')}</textarea></div>
                 <div class="form-group"><label>输出格式</label><textarea id="p-ofmt" rows="2">${escapeHtml(p.output_format || '')}</textarea></div>
-                <div class="form-group"><label>样例输入</label><textarea id="p-sin" rows="3">${escapeHtml(p.sample_input || '')}</textarea></div>
-                <div class="form-group"><label>样例输出</label><textarea id="p-sout" rows="3">${escapeHtml(p.sample_output || '')}</textarea></div>
+                <div class="form-group"><label>公开示例输入</label><textarea id="p-sin" rows="4">${escapeHtml(p.sample_input || '')}</textarea>
+                    <p class="admin-hint">多组示例请用单独一行 <code>---</code> 分隔，审核通过后做题页显示为示例 Tab。</p></div>
+                <div class="form-group"><label>公开示例输出</label><textarea id="p-sout" rows="4">${escapeHtml(p.sample_output || '')}</textarea>
+                    <p class="admin-hint">公开示例和隐藏测试点相互独立，隐藏测试点在下方审核用例维护。</p></div>
                 <div id="form-error" class="error" style="display:none;"></div>
                 <button type="submit" class="btn-secondary" style="width:auto;padding:8px 18px;">保存修改</button>
             </form>

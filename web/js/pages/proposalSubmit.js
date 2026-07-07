@@ -36,8 +36,10 @@ async function renderProposalSubmit(main) {
             </div>
             <div class="form-group"><label>输入格式</label><textarea id="p-ifmt" rows="2"></textarea></div>
             <div class="form-group"><label>输出格式</label><textarea id="p-ofmt" rows="2"></textarea></div>
-            <div class="form-group"><label>样例输入</label><textarea id="p-sin" rows="3"></textarea></div>
-            <div class="form-group"><label>样例输出</label><textarea id="p-sout" rows="3"></textarea></div>
+            <div class="form-group"><label>公开示例输入</label><textarea id="p-sin" rows="4"></textarea>
+                <p class="admin-hint">多组示例请用单独一行 <code>---</code> 分隔，做题页会显示为示例 Tab。</p></div>
+            <div class="form-group"><label>公开示例输出</label><textarea id="p-sout" rows="4"></textarea>
+                <p class="admin-hint">示例用于解释题意；正式判题用例由管理员审核时补充。</p></div>
             <div class="form-row">
                 <div class="form-group"><label>时间限制(秒)</label><input type="number" id="p-tl" value="1" min="0.1" step="0.1"></div>
                 <div class="form-group"><label>内存限制(MB)</label><input type="number" id="p-ml" value="256" min="1"></div>

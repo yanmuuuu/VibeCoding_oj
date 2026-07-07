@@ -41,8 +41,10 @@ async function renderAdminQuestionEdit(main) {
                 </div>
                 <div class="form-group"><label>输入格式</label><textarea id="q-ifmt" rows="2">${escapeHtml(q.input_format || '')}</textarea></div>
                 <div class="form-group"><label>输出格式</label><textarea id="q-ofmt" rows="2">${escapeHtml(q.output_format || '')}</textarea></div>
-                <div class="form-group"><label>样例输入</label><textarea id="q-sin" rows="3">${escapeHtml(q.sample_input || '')}</textarea></div>
-                <div class="form-group"><label>样例输出</label><textarea id="q-sout" rows="3">${escapeHtml(q.sample_output || '')}</textarea></div>
+                <div class="form-group"><label>公开示例输入</label><textarea id="q-sin" rows="4">${escapeHtml(q.sample_input || '')}</textarea>
+                    <p class="admin-hint">多组示例请用单独一行 <code>---</code> 分隔；做题页会渲染为 LeetCode 风格示例 Tab。</p></div>
+                <div class="form-group"><label>公开示例输出</label><textarea id="q-sout" rows="4">${escapeHtml(q.sample_output || '')}</textarea>
+                    <p class="admin-hint">输出分组数量建议与输入一致；隐藏测试点仍在下方「测试用例管理」维护。</p></div>
                 <div class="form-group"><label><input type="checkbox" id="q-vis" ${q.is_visible ? 'checked' : ''}> 可见（发布）</label></div>
                 <div id="form-error" class="error" style="display:none;"></div>
                 <button type="submit" class="btn-primary" style="width:auto;padding:8px 24px;">保存题目信息</button>
