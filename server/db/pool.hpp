@@ -36,7 +36,6 @@ public:
 private:
     MYSQL* create_connection();
     bool validate_connection(MYSQL* conn);
-    MYSQL* get_valid_connection();
 
     std::string host_;
     int port_;
@@ -47,6 +46,7 @@ private:
     std::mutex mutex_;
     std::condition_variable cv_;
     int pool_size_;
+    int in_use_;
 };
 
 extern DbPool* g_db;

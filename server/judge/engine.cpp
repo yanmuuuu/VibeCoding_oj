@@ -42,23 +42,23 @@ void JudgeEngine::mark_system_error(int submission_id, const std::string& messag
 
 void JudgeEngine::process(int submission_id, const std::string& code, int question_id,
                           int time_limit, int memory_limit, bool run_all_tests) {
-    auto db = g_db->acquire();
+    {
+        auto db = g_db->acquire();
+        db->query("UPDATE submissions SET status='COMPILING' WHERE id=" + std::to_string(submission_id));
+    }
 
-    // Update status to COMPILING
-    db->query("UPDATE submissions SET status='COMPILING' WHERE id=" + std::to_string(submission_id));
-
-    // Compile
     CompileResult comp = compile_code(code, g_config.tmp_dir, g_config.compile_timeout);
     if (!comp.success) {
+        auto db = g_db->acquire();
         std::string err = db->escape(comp.error);
         db->query("UPDATE submissions SET status='CE', compile_error='" + err + "', total_count=0, passed_count=0 WHERE id=" + std::to_string(submission_id));
         LOG_WARNING("Submission #" + std::to_string(submission_id) + " compile error: " + comp.error);
         return;
     }
 
-    // Check binary size
     if (g_config.max_binary_size > 0 && comp.binary_size > g_config.max_binary_size) {
         unlink(comp.binary_path.c_str());
+        auto db = g_db->acquire();
         db->query("UPDATE submissions SET status='CE', compile_error='Binary exceeds size limit (" +
                   std::to_string(g_config.max_binary_size) + " bytes)', total_count=0, passed_count=0 WHERE id=" +
                   std::to_string(submission_id));
@@ -68,38 +68,39 @@ void JudgeEngine::process(int submission_id, const std::string& code, int questi
         return;
     }
 
-    // Get test cases
-    db->query("SELECT id, order_index, input_data, expected_output FROM test_cases WHERE question_id=" +
-              std::to_string(question_id) + " ORDER BY order_index ASC");
-    MYSQL_RES* res = db->store_result();
-    if (!res) {
-        unlink(comp.binary_path.c_str());
-        db->query("UPDATE submissions SET status='SE' WHERE id=" + std::to_string(submission_id));
-        return;
-    }
-
     std::vector<TestCase> test_cases;
-    MYSQL_ROW row;
-    while ((row = mysql_fetch_row(res))) {
-        TestCase tc;
-        tc.id = std::stoi(row[0]);
-        tc.order_index = std::stoi(row[1]);
-        tc.input_data = row[2] ? row[2] : "";
-        tc.expected_output = row[3] ? row[3] : "";
-        test_cases.push_back(tc);
-    }
-    mysql_free_result(res);
+    {
+        auto db = g_db->acquire();
+        db->query("SELECT id, order_index, input_data, expected_output FROM test_cases WHERE question_id=" +
+                  std::to_string(question_id) + " ORDER BY order_index ASC");
+        MYSQL_RES* res = db->store_result();
+        if (!res) {
+            unlink(comp.binary_path.c_str());
+            db->query("UPDATE submissions SET status='SE' WHERE id=" + std::to_string(submission_id));
+            return;
+        }
 
-    if (test_cases.empty()) {
-        unlink(comp.binary_path.c_str());
-        db->query("UPDATE submissions SET status='SE' WHERE id=" + std::to_string(submission_id));
-        LOG_ERROR("Submission #" + std::to_string(submission_id) + " SE: no test cases for question #" + std::to_string(question_id));
-        return;
-    }
+        MYSQL_ROW row;
+        while ((row = mysql_fetch_row(res))) {
+            TestCase tc;
+            tc.id = std::stoi(row[0]);
+            tc.order_index = std::stoi(row[1]);
+            tc.input_data = row[2] ? row[2] : "";
+            tc.expected_output = row[3] ? row[3] : "";
+            test_cases.push_back(tc);
+        }
+        mysql_free_result(res);
 
-    // Update status to RUNNING
-    db->query("UPDATE submissions SET status='RUNNING', total_count=" +
-              std::to_string(test_cases.size()) + " WHERE id=" + std::to_string(submission_id));
+        if (test_cases.empty()) {
+            unlink(comp.binary_path.c_str());
+            db->query("UPDATE submissions SET status='SE' WHERE id=" + std::to_string(submission_id));
+            LOG_ERROR("Submission #" + std::to_string(submission_id) + " SE: no test cases for question #" + std::to_string(question_id));
+            return;
+        }
+
+        db->query("UPDATE submissions SET status='RUNNING', total_count=" +
+                  std::to_string(test_cases.size()) + " WHERE id=" + std::to_string(submission_id));
+    }
 
     // Run all test cases
     std::vector<RunResult> results;
@@ -137,9 +138,9 @@ void JudgeEngine::process(int submission_id, const std::string& code, int questi
              << "}";
     }
     json << "]";
+    auto db = g_db->acquire();
     std::string detail = db->escape(json.str());
 
-    // Update submission
     std::ostringstream sql;
     sql << "UPDATE submissions SET status='" << final_status << "',"
         << "total_time=" << max_time << ","

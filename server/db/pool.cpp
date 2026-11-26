@@ -40,6 +40,8 @@ MYSQL* DbPool::create_connection() {
         throw std::runtime_error("mysql_init failed");
     }
     mysql_options(conn, MYSQL_SET_CHARSET_NAME, "utf8mb4");
+    unsigned int connect_timeout = 3;
+    mysql_options(conn, MYSQL_OPT_CONNECT_TIMEOUT, &connect_timeout);
     if (!mysql_real_connect(conn, host_.c_str(), user_.c_str(), pass_.c_str(),
                             db_.c_str(), port_, nullptr, 0)) {
         std::string err = mysql_error(conn);
@@ -63,18 +65,9 @@ bool DbPool::validate_connection(MYSQL* conn) {
     return false;
 }
 
-MYSQL* DbPool::get_valid_connection() {
-    while (!pool_.empty()) {
-        MYSQL* conn = pool_.front();
-        pool_.pop();
-        if (validate_connection(conn)) return conn;
-    }
-    return create_connection();
-}
-
 DbPool::DbPool(const std::string& host, int port, const std::string& user,
                const std::string& pass, const std::string& db, int size)
-    : host_(host), port_(port), user_(user), pass_(pass), db_(db), pool_size_(size) {
+    : host_(host), port_(port), user_(user), pass_(pass), db_(db), pool_size_(size), in_use_(0) {
     for (int i = 0; i < size; ++i) {
         pool_.push(create_connection());
     }
@@ -90,21 +83,60 @@ DbPool::~DbPool() {
 }
 
 std::shared_ptr<DbConn> DbPool::acquire(int timeout_ms) {
-    std::unique_lock<std::mutex> lock(mutex_);
-    if (!cv_.wait_for(lock, std::chrono::milliseconds(timeout_ms), [this]{ return !pool_.empty(); })) {
-        throw std::runtime_error("DB pool: acquire timeout after " + std::to_string(timeout_ms) + "ms, all connections busy");
+    MYSQL* conn = nullptr;
+    bool need_create = false;
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+        while (pool_.empty() && in_use_ >= pool_size_) {
+            if (cv_.wait_until(lock, deadline) == std::cv_status::timeout &&
+                pool_.empty() && in_use_ >= pool_size_) {
+                throw std::runtime_error("DB pool: acquire timeout after " + std::to_string(timeout_ms) + "ms, all connections busy");
+            }
+        }
+        if (!pool_.empty()) {
+            conn = pool_.front();
+            pool_.pop();
+        } else {
+            need_create = true;
+        }
+        ++in_use_;
     }
-    MYSQL* conn = get_valid_connection();
-    return std::shared_ptr<DbConn>(new DbConn(conn), [this](DbConn* dc) {
-        release(dc->get());
-        delete dc;
-    });
+
+    try {
+        if (need_create || !validate_connection(conn)) {
+            conn = create_connection();
+        }
+    } catch (...) {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            --in_use_;
+        }
+        cv_.notify_one();
+        throw;
+    }
+
+    try {
+        return std::shared_ptr<DbConn>(new DbConn(conn), [this](DbConn* dc) {
+            release(dc->get());
+            delete dc;
+        });
+    } catch (...) {
+        mysql_close(conn);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            --in_use_;
+        }
+        cv_.notify_one();
+        throw;
+    }
 }
 
 void DbPool::release(MYSQL* conn) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         pool_.push(conn);
+        --in_use_;
     }
     cv_.notify_one();
 }
