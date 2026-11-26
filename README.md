@@ -1,114 +1,93 @@
 # MioOJ
 
-> 一个由**程序员 × AI 双向奔赴**完成的在线判题系统 —— 我负责想清楚、验收到位、推上线；AI 负责加速实现与迭代。
+仿 LeetCode 的 C++ 在线判题系统（ACM 模式：标准输入 / 标准输出）。
 
-**线上体验：** https://rinr.top
-
----
-
-## 这是什么
-
-**MioOJ** 是一个仿 LeetCode 的 C++ 在线判题平台（ACM 模式：标准输入/输出），包含：
-
-- 题目浏览、代码提交、自动判题（AC / WA / TLE / MLE / RE / CE）
-- LeetCode 风格公开样例、题目通过率统计、全测试点反馈模式、题单训练、个人进度与错题本
-- 用户系统、排行榜、讨论区、私信、公告
-- 管理员后台：录题向导、标程生成、测试用例、用户/讨论管理
-- 相册风 / LeetCode 白模式双主题 UI
-
-技术栈：**C++ (cpp-httplib) + MySQL + 原生 JS SPA + ACE Editor**，单机 Nginx + HTTPS 部署。
+**线上地址：** [https://rinr.top](https://rinr.top)
 
 ---
 
-## 人机协作：我的角色 vs AI 的角色
+## 技术栈
 
-这个项目不是「AI 一键生成」，而是**我主导、AI 结对**：
+| 层 | 选型 |
+|----|------|
+| 后端 | C++17，单进程 `vibeoj`（[cpp-httplib](https://github.com/yhirose/cpp-httplib) 同时提供 REST API 与静态文件） |
+| 数据库 | MySQL，自研连接池（`mysql_ping` 健康检查 + 获取超时） |
+| 认证 | Argon2id 密码哈希，随机 token 写入 `sessions`，Cookie 维持登录态 |
+| 判题 | `/usr/bin/g++ -O2 -std=c++17` 编译，线程池调度；每题 `fork` 子进程，`setrlimit` 限制 CPU / 内存 / 输出 |
+| 模板 | ctemplate 渲染初始 HTML 骨架 |
+| 前端 | 原生 HTML / CSS / JS，Hash 路由 SPA，无 npm 构建；代码编辑用 ACE Editor |
+| 部署 | Nginx 反代 + systemd 常驻 + Certbot（Let's Encrypt）HTTPS |
 
-| 我（程序员）负责 | AI（Cursor）辅助 |
-|------------------|------------------|
-| 产品方向：要做什么 OJ、哪些功能优先 | 根据 SPEC 快速出骨架与接口 |
-| 写/维护 **SPEC.md**：需求、表结构、验收标准 | 按 SPEC 实现 handler、前端页面、SQL 迁移 |
-| 关键决策：判题模型、安全边界、部署架构 | 排查 bug、补边界 case、改 Nginx/systemd |
-| 验收：AC 标准、UI 细节、录题流程是否顺手 | 重构、统一弹窗、按用户隔离代码草稿 |
-| **部署上线**：域名、HTTPS、服务器运维 | 生成 `deploy/` 脚本与运维文档 |
-| 面试叙事、文档、Git 管理 | 解释原理、写 interview 参考答案 |
-
-**双向奔赴**的含义：不是我丢一句话就完事，也不是 AI 替我写 spec —— 而是我不断**提需求、纠偏差、验结果**，AI 在循环里**实现、修复、文档化**，最终把 MioOJ 从 SPEC 推到 **https://rinr.top** 真正跑起来。
+对外品牌名是 **MioOJ**。二进制、数据库和 systemd 服务名仍是 `vibeoj`。
 
 ---
 
-## 架构一览
+## 功能
+
+- **做题：** 题目列表（编号、标题、难度、通过率）、搜索与难度筛选、题目详情、公开样例（多组样例用单独一行 `---` 分隔，可复制）
+- **判题：** 提交 C++ 后异步判题，结果为 AC / WA / TLE / MLE / RE / CE / SE；默认首个非 AC 后停止，也可勾选「跑完全部测试点」。结果页用测试点网格展示状态、耗时和内存，不展示隐藏数据
+- **练习：** 按难度的个人进度、近一年提交热力图、错题本、内置题单（全部 / 简单 / 中等 / 困难）
+- **社区：** 讨论区与题目评论（Markdown、嵌套回复、点赞）、排行榜（简单 1 / 中等 2 / 困难 3，每题 AC 只计一次）、私信（未读角标、60 秒内撤回）、系统公告、他人公开主页
+- **录题：** 用户提交题面，管理员补标程和测试用例后审核；通过后写入正式题库，可不立即公开
+- **后台：** 统计、题目向导（基本信息 → 标程 → 测试用例）、标程一键生成期望输出、用户封禁与重置密码、公告与讨论管理
+- **界面：** 默认相册风暗色主题，设置里可切到 LeetCode 白模式；确认框统一为站内弹窗。代码草稿按「用户 + 题目」存在本地，换账号不会串稿
+
+用户可见题号是 `display_index`（从 0 起），和数据库自增 `id` 分开。
+
+---
+
+## 架构
 
 ```
 浏览器 (Hash SPA)
     ↓ HTTPS
-Nginx → vibeoj(:8080) → MySQL
+Nginx → vibeoj (:8080) → MySQL
               ↓
-         判题引擎 (编译限额 + fork + setrlimit + 线程池)
+         判题线程池
+         编译（限额）→ 每测试点 fork + setrlimit → 比对 stdout
 ```
 
-- 前端：`web/` 静态资源，无 npm 构建
-- 后端：单二进制 `vibeoj`，API + 静态文件一体
-- 配置：`deploy/production.env`（生产）/ `deploy/local.env`（本地 8081）
+- 前端静态资源在 `web/`，由同一进程直接提供
+- 生产配置：`deploy/production.env`；本地：`deploy/local.env`（建议端口 8081）
+- 密钥只放环境变量，不进 Git
 
 ---
 
 ## 快速开始
 
-### 克隆与依赖
+依赖：`g++`、`make`、MySQL、`libmysqlclient-dev`、`libargon2-dev`、`libctemplate`、OpenSSL、zlib。安装步骤见 [SPEC.md](SPEC.md) 第 14 节。
 
 ```bash
 git clone git@github.com:yanmuuuu/VibeCoding_oj.git
 cd VibeCoding_oj
-# 依赖：g++、make、MySQL、libmysqlclient-dev、libargon2-dev、ctemplate 等
-# 详见 SPEC.md 第 14 节
-```
 
-### 本地试跑
-
-```bash
 cp deploy/config.example.env deploy/local.env
-# 编辑 local.env 填写 VIBEOJ_DB_PASSWORD，建议 VIBEOJ_PORT=8081
+# 填写 VIBEOJ_DB_PASSWORD，本地建议 VIBEOJ_PORT=8081
 
 make clean && make && make run-local
-# → http://127.0.0.1:8081
+# http://127.0.0.1:8081
 ```
 
-### 生产更新（服务器）
+服务器更新：
 
 ```bash
 git pull
 bash deploy/update-prod.sh
 ```
 
-更多：**[deploy/运维手册.md](deploy/运维手册.md)**
+运维命令（启停、日志、MySQL）见 [deploy/运维手册.md](deploy/运维手册.md)。
 
 ---
 
-## 文档索引
+## 文档
 
 | 文件 | 说明 |
 |------|------|
-| [SPEC.md](SPEC.md) | 完整需求、API、表结构、Phase 记录、验收标准 |
-| [interview.md](interview.md) | 面试可能问到的问题与参考答案 |
-| [deploy/运维手册.md](deploy/运维手册.md) | 更新、暂停、重启、日志、MySQL |
-
----
-
-## 功能亮点（面试可讲）
-
-1. **自研判题管道**：编译 → 多测试点 fork 运行 → 输出比对，线程池并发
-2. **判题可靠性加固**：编译阶段资源限制、`/usr/bin/g++` 绝对路径、异常兜底 SE、部分写入处理
-3. **刷题反馈**：LeetCode 风格公开样例 Tab + 一键复制，题目通过率/AC 人数统计，可选「跑完全部测试点」查看完整状态网格
-4. **学习闭环**：个人进度、提交热力图、错题本、按难度自动生成的题单训练
-5. **录题闭环**：Markdown 描述 + ACE 标程 + 一键生成期望输出 + 发布校验
-6. **工程化部署**：环境变量隔离密钥、systemd 常驻、Certbot HTTPS
-7. **体验细节**：代码草稿按用户隔离、统一 mio-dialog、display_index 从 0 起
+| [SPEC.md](SPEC.md) | 需求、API、表结构、判题流程、验收标准 |
+| [deploy/运维手册.md](deploy/运维手册.md) | 更新、暂停、重启、日志 |
 
 ---
 
 ## 作者
 
-个人学习项目，欢迎 Issue / Star。
-
-**开发方式：** 需求与验收在我，实现与迭代在人机协作中完成 —— 这是 Vibe Coding，也是 MioOJ 真实的诞生方式。
+个人学习项目。[https://rinr.top](https://rinr.top)

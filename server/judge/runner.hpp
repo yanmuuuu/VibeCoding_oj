@@ -5,7 +5,7 @@
 struct TestCase {
     int id;
     int order_index;
-    std::string input_data;
+    std::string input_data;                                            
     std::string expected_output;
 };
 

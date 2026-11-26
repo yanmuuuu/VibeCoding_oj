@@ -12,7 +12,6 @@
 | **数据库** | MySQL |
 | **部署** | 单机：Nginx 反代 + HTTPS（Let's Encrypt）+ systemd 常驻；详见 `deploy/运维手册.md` |
 | **线上地址** | https://rinr.top |
-| **协作方式** | 程序员主导需求/验收/部署，AI（Cursor）辅助实现与迭代；见 `README.md` |
 
 ---
 
@@ -720,8 +719,7 @@ CREATE TABLE messages (
 ```
 MioOJ/
 ├── SPEC.md
-├── README.md                         # 项目介绍（人机协作开发叙事）
-├── interview.md                      # 面试问答参考
+├── README.md                         # 项目介绍、技术栈与功能
 ├── .gitignore
 ├── deploy/                           # 部署脚本与运维文档
 │   ├── config.example.env            # 环境变量模板
@@ -1401,7 +1399,7 @@ MioOJ/
 - [x] systemd + Nginx 反代 + Let's Encrypt HTTPS（`rinr.top`）
 - [x] `deploy/update-prod.sh` 安全更新（先 stop 再编译再 start，避免端口冲突）
 - [x] `deploy/运维手册.md`：更新/暂停/重启/日志速查
-- [x] `README.md` / `interview.md` 项目说明与面试参考
+- [x] `README.md` 项目说明（技术栈、功能、本地启动）
 
 ### Phase 34 — 用户录题与管理员审核 ✅
 - [x] 数据库：`problem_proposals` + `proposal_test_cases`（`migrate_phase34.sql`）
